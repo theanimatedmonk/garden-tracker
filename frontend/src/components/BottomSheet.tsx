@@ -3,11 +3,12 @@ import { useEffect, type ReactNode } from "react";
 type Props = {
   open: boolean;
   title: string;
+  eyebrow?: string;
   onClose: () => void;
   children: ReactNode;
 };
 
-export function BottomSheet({ open, title, onClose, children }: Props) {
+export function BottomSheet({ open, title, eyebrow, onClose, children }: Props) {
   useEffect(() => {
     if (!open) {
       return;
@@ -33,11 +34,13 @@ export function BottomSheet({ open, title, onClose, children }: Props) {
     <div className="sheet-root" role="presentation">
       <button type="button" className="sheet-backdrop" aria-label="Close" onClick={onClose} />
       <div className="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-        <div className="sheet-handle" aria-hidden />
         <header className="sheet-header">
-          <h2 id="sheet-title">{title}</h2>
-          <button type="button" className="sheet-close" onClick={onClose}>
-            Done
+          <div>
+            {eyebrow && <span className="sheet-eyebrow">{eyebrow}</span>}
+            <h2 id="sheet-title">{title}</h2>
+          </div>
+          <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">
+            ✕
           </button>
         </header>
         <div className="sheet-body">{children}</div>

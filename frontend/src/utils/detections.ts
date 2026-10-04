@@ -86,3 +86,41 @@ export function parseDateInput(value: string): Date {
   const [y, m, d] = value.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
+
+/** Dex numbers in discovery order: the first species ever heard is #001. */
+export function assignDexNumbers(detections: Detection[]): Map<string, number> {
+  const firstHeard = new Map<string, number>();
+  for (const d of detections) {
+    const t = new Date(d.timestamp).getTime();
+    const prev = firstHeard.get(d.species);
+    if (prev === undefined || t < prev) {
+      firstHeard.set(d.species, t);
+    }
+  }
+  const ordered = [...firstHeard.entries()].sort((a, b) => a[1] - b[1]);
+  return new Map(ordered.map(([species], i) => [species, i + 1]));
+}
+
+export function formatDexNo(n: number | undefined): string {
+  return n ? `#${String(n).padStart(3, "0")}` : "#???";
+}
+
+export type ConfidenceTier = { label: string; tone: "clear" | "likely" | "faint" };
+
+export function confidenceTier(confidence: number): ConfidenceTier {
+  if (confidence >= 0.85) {
+    return { label: "Clear call", tone: "clear" };
+  }
+  if (confidence >= 0.6) {
+    return { label: "Likely", tone: "likely" };
+  }
+  return { label: "Faint", tone: "faint" };
+}
+
+export function firstHeard(group: SpeciesGroup): string {
+  return group.detections[group.detections.length - 1].timestamp;
+}
+
+export function isFirstHeardToday(group: SpeciesGroup): boolean {
+  return startOfDay(new Date(firstHeard(group))).getTime() === startOfDay(new Date()).getTime();
+}
