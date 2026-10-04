@@ -1,35 +1,44 @@
 import { NavLink, Route, Routes } from "react-router-dom";
+import { LogbookPage } from "./pages/LogbookPage";
 import { ObserverPage } from "./pages/ObserverPage";
-import { WildlifePage } from "./pages/WildlifePage";
 import { SoundscapePage } from "./pages/SoundscapePage";
-import { HistoryPage } from "./pages/HistoryPage";
 
 export default function App() {
   return (
-    <div className="app-shell">
-      <nav className="nav">
-        <span className="nav-brand">Wildlife Observer</span>
-        <NavLink to="/" end className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-          Observer
-        </NavLink>
-        <NavLink to="/wildlife" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-          My Wildlife
-        </NavLink>
-        <NavLink to="/history" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-          History
-        </NavLink>
-        <NavLink to="/soundscape" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-          Soundscape
-        </NavLink>
-      </nav>
-      <main className="main">
+    <div className="app-shell app-mobile">
+      <main className="main main-mobile">
         <Routes>
           <Route path="/" element={<ObserverPage />} />
-          <Route path="/wildlife" element={<WildlifePage />} />
-          <Route path="/history" element={<HistoryPage />} />
           <Route path="/soundscape" element={<SoundscapePage />} />
+          <Route path="/logbook" element={<LogbookPage />} />
         </Routes>
       </main>
+      <nav className="bottom-nav" aria-label="Main">
+        <NavLink to="/" end className={({ isActive }) => (isActive ? "bottom-link active" : "bottom-link")}>
+          <span className="bottom-icon" aria-hidden>
+            ◉
+          </span>
+          Observer
+        </NavLink>
+        <NavLink
+          to="/soundscape"
+          className={({ isActive }) => (isActive ? "bottom-link active" : "bottom-link")}
+        >
+          <span className="bottom-icon" aria-hidden>
+            ◐
+          </span>
+          Soundscape
+        </NavLink>
+        <NavLink
+          to="/logbook"
+          className={({ isActive }) => (isActive ? "bottom-link active" : "bottom-link")}
+        >
+          <span className="bottom-icon" aria-hidden>
+            ☰
+          </span>
+          Logbook
+        </NavLink>
+      </nav>
     </div>
   );
 }

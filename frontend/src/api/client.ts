@@ -105,7 +105,8 @@ async function fetchJson<T>(path: string): Promise<T> {
 export const api = {
   status: () => fetchJson<StatusResponse>("/api/status"),
   events: () => fetchJson<{ events: WildlifeEvent[] }>("/api/events"),
-  detections: () => fetchJson<{ detections: Detection[] }>("/api/detections?limit=200"),
+  detections: (limit = 200) =>
+    fetchJson<{ detections: Detection[] }>(`/api/detections?limit=${limit}`),
   species: () => fetchJson<{ species: SpeciesSummary[] }>("/api/species"),
 };
 

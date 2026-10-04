@@ -12,7 +12,9 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 — API calls proxy to port 8000.
+Mobile-first UI with bottom tabs: **Observer** (vertical reel cards), **Soundscape** (daily graph), **Logbook** (search + filters).
+
+Open http://localhost:5173 — best at phone width (~480px). API calls go to port 8000.
 
 ## Notes
 
