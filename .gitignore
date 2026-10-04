@@ -1,6 +1,8 @@
 include/secrets.h
 .pio/
 .DS_Store
+plan.md
+module.md
 backend/.venv/
 backend/data/recordings/
 backend/data/history/
