@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Detection } from "../api/client";
 import {
+  assignDexNumbers,
   filterDetectionsByDay,
+  formatDexNo,
   groupDetectionsBySpecies,
   parseDateInput,
   toDateInputValue,
@@ -49,14 +51,15 @@ export function SoundscapePage() {
   }, [dayDetections]);
 
   const maxCount = Math.max(1, ...buckets.map((b) => b.detections.length));
-  const uniqueSpecies = groupDetectionsBySpecies(dayDetections).length;
+  const daySpecies = useMemo(() => groupDetectionsBySpecies(dayDetections), [dayDetections]);
+  const dexNos = useMemo(() => assignDexNumbers(detections), [detections]);
 
   return (
     <section className="mobile-page soundscape-page">
       <header className="page-header">
-        <h1>Soundscape</h1>
+        <h1 className="pixel">Radar</h1>
         <p className="lede">
-          {uniqueSpecies} species · {dayDetections.length} detections
+          {daySpecies.length} species · {dayDetections.length} calls
         </p>
       </header>
 
@@ -89,11 +92,11 @@ export function SoundscapePage() {
                           : undefined
                       }
                     >
-                      {!info.image && "🐦"}
+                      {!info.image && "?"}
                     </span>
                   ))}
                 </div>
-                <div className="graph-bar" style={{ height: `${height}%` }} />
+                <div className={b.detections.length ? "graph-bar" : "graph-bar idle"} style={{ height: `${height}%` }} />
                 <span className="graph-hour">{String(b.hour).padStart(2, "0")}</span>
               </div>
             );
@@ -102,12 +105,13 @@ export function SoundscapePage() {
       </div>
 
       <ul className="soundscape-legend">
-        {groupDetectionsBySpecies(dayDetections).slice(0, 12).map((g) => (
+        {daySpecies.slice(0, 12).map((g) => (
           <li key={g.species}>
+            <span className="legend-no pixel">{formatDexNo(dexNos.get(g.species))}</span>
             {g.image_url ? (
               <img src={g.image_url} alt="" className="legend-avatar" />
             ) : (
-              <span className="legend-avatar legend-fallback">🐦</span>
+              <span className="legend-avatar legend-fallback">?</span>
             )}
             <span>{g.species}</span>
             <span className="legend-count">{g.detections.length}</span>
