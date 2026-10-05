@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app.audio_utils import AudioSegmentBuffer, resample_pcm_int16, save_wav
+from app.audio_utils import AudioSegmentBuffer, pcm_stats, resample_pcm_int16, save_wav
 from app.birdnet_runner import birdnet_runner
 from app.config import settings
 from app.event_processor import event_processor
@@ -41,6 +41,7 @@ IMAGE_CACHE = HISTORY_DIR / "image_cache.json"
 segment_buffers: dict[str, AudioSegmentBuffer] = {}
 event_subscribers: list[asyncio.Queue[str]] = []
 analysis_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="birdnet")
+last_segment_diagnostics: dict[str, object] = {}
 
 
 class HeartbeatBody(BaseModel):
@@ -93,7 +94,41 @@ def process_segment(pcm: bytes, device_id: str) -> tuple[list[dict], WildlifeEve
     save_wav(birdnet_path, birdnet_pcm, settings.birdnet_sample_rate)
 
     predictions = birdnet_runner.analyze_wav(birdnet_path)
+    peak, rms = pcm_stats(pcm)
     if not predictions:
+        peek = birdnet_runner.peek_top(birdnet_path)
+        last_segment_diagnostics.update(
+            {
+                "peak": peak,
+                "rms": round(rms, 1),
+                "logged": False,
+                "reason": "no_species_above_birdnet_min_conf",
+                "birdnet_min_conf": settings.birdnet_min_conf,
+                "peek_species": peek.species if peek else None,
+                "peek_confidence": round(peek.confidence, 3) if peek else None,
+            }
+        )
+        if rms < 150:
+            logger.warning(
+                "Segment very quiet (peak=%s rms=%.0f) — check mic aim at window",
+                peak,
+                rms,
+            )
+        elif peek and peek.confidence >= settings.birdnet_min_conf:
+            logger.info(
+                "Segment loud (rms=%.0f) but geo/threshold filtered; peek=%s %.2f",
+                rms,
+                peek.species,
+                peek.confidence,
+            )
+        elif peek:
+            logger.info(
+                "Birds weak in clip (rms=%.0f) peek=%s %.2f below min %.2f",
+                rms,
+                peek.species,
+                peek.confidence,
+                settings.birdnet_min_conf,
+            )
         _delete_segment_files(wav_path, birdnet_path)
         return [], None
 
@@ -106,6 +141,15 @@ def process_segment(pcm: bytes, device_id: str) -> tuple[list[dict], WildlifeEve
     if not detections:
         _delete_segment_files(wav_path, birdnet_path)
         return [], event
+    last_segment_diagnostics.update(
+        {
+            "peak": peak,
+            "rms": round(rms, 1),
+            "logged": True,
+            "top_species": detections[0].species,
+            "top_confidence": round(detections[0].confidence, 3),
+        }
+    )
     return [d.to_dict() for d in detections], event
 
 
@@ -153,6 +197,7 @@ def status() -> dict:
         "jev_active": settings.jev_mode.strip().lower() in {"llm", "jev", "hybrid"}
         and bool(settings.typesafe_pai_api_key.strip()),
         "devices": store.device_status(),
+        "last_segment": last_segment_diagnostics,
     }
 
 

@@ -99,6 +99,19 @@ class BirdNetRunner:
 
         return out
 
+    def peek_top(self, wav_path: Path) -> RawPrediction | None:
+        """Best match at very low threshold, no geo filter — diagnostics only."""
+        if self.mode != "birdnet" or self._analyzer is None or self._Recording is None:
+            return None
+        recording = self._Recording(self._analyzer, str(wav_path), min_conf=0.01)
+        recording.analyze()
+        best: RawPrediction | None = None
+        for det in recording.detections:
+            pred = _parse_detection(det)
+            if best is None or pred.confidence > best.confidence:
+                best = pred
+        return best
+
     def _analyze_mock(self, wav_path: Path) -> list[RawPrediction]:
         try:
             import wave

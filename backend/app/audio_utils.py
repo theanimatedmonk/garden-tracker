@@ -25,6 +25,15 @@ def save_wav(path: Path, pcm: bytes, sample_rate: int) -> None:
     path.write_bytes(pcm_to_wav(pcm, sample_rate))
 
 
+def pcm_stats(pcm: bytes) -> tuple[int, float]:
+    samples = np.frombuffer(pcm, dtype=np.int16)
+    if samples.size == 0:
+        return 0, 0.0
+    peak = int(np.max(np.abs(samples)))
+    rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+    return peak, rms
+
+
 def resample_pcm_int16(pcm: bytes, from_rate: int, to_rate: int) -> bytes:
     if from_rate == to_rate:
         return pcm

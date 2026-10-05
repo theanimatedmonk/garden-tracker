@@ -55,7 +55,7 @@ flowchart LR
 | **Event processor** | `backend/app/event_processor.py` | Writes **detections** to history; optionally creates a **surfaced event** for the hero. |
 | **JEV** | `backend/app/jev_client.py` | When enabled, asks TypeSafe **Jev** whether to interrupt the UI (species already fixed by BirdNET). |
 | **Store** | `backend/app/store.py` | In-memory + `detections.jsonl` / `events.jsonl`; species summaries. |
-| **Frontend** | `frontend/` | Observer (hero + log), My Wildlife, History, Soundscape. |
+| **Frontend** | `frontend/` | Mobile UI: **Observer** (reel cards), **Soundscape** (day graph), **Logbook** (search + filters). |
 
 BirdNET **identifies**; JEV **judges attention**. JEV never changes the species label.
 
@@ -71,7 +71,7 @@ Controls which BirdNET hits become **detections** (bird log cards + JSONL). Also
 
 | Env variable | Default (project) | Meaning |
 |--------------|-------------------|---------|
-| **`BIRDNET_MIN_CONF`** | **0.18** | Minimum BirdNET confidence to accept a species for this segment. Below → **no detection**, **WAVs deleted**. |
+| **`BIRDNET_MIN_CONF`** | **0.12** | Minimum BirdNET confidence to accept a species for this segment. Below → **no detection**, **WAVs deleted**. |
 | **`BIRDNET_USE_GEO`** | `true` | Drop species unlikely near `BIRDNET_LAT` / `BIRDNET_LON`. |
 | **`ANALYSIS_WINDOW_SECONDS`** | **3** | Seconds of audio buffered before one BirdNET run (BirdNET-friendly; fast UI). |
 
@@ -83,7 +83,7 @@ Logging and surfacing are **separate**. Many detections can exist without the bi
 
 | Env variable | Default (project) | Meaning |
 |--------------|-------------------|---------|
-| **`MIN_CONFIDENCE`** | **0.40** | Hard floor before hero/JEV is considered. Below → no surfaced event (log may still have the row if ≥ `BIRDNET_MIN_CONF`). |
+| **`MIN_CONFIDENCE`** | **0.35** | Hard floor before hero/JEV is considered. Below → no surfaced event (log may still have the row if ≥ `BIRDNET_MIN_CONF`). |
 | **`EVENT_COOLDOWN_SECONDS`** | **300** | Same species cannot surface again within 5 minutes. |
 | **`JEV_MODE`** | **`llm`** | `rules` = simple heuristics; `llm` = TypeSafe Jev API (needs key). |
 | **`JEV_SURFACE_THRESHOLD`** | **0.55** | In LLM mode: Jev “yes” probability must be ≥ this (and not classified as a routine repeat). |
@@ -109,25 +109,25 @@ On Jev API failure, surfacing **falls back** to rule-based behavior for that seg
 **08:00 — Quiet room**
 
 - ESP32 sends ~1 s of PCM every second. Backend fills a **3 s** buffer.
-- BirdNET hears mostly room tone; nothing ≥ **0.18** → **no log row**, **WAVs deleted**. UI stays on “Listening…”.
+- BirdNET hears mostly room tone; nothing ≥ **0.12** → **no log row**, **WAVs deleted**. UI stays on “Listening…”.
 
 **08:04 — House Crow calls outside (strong)**
 
 1. Buffer fills; backend saves `abc123.wav` + `abc123_48k.wav`.
-2. BirdNET: *House Crow* **0.52** (above **0.18**) → up to 5 top species rows appended to **`detections.jsonl`**; WAVs **kept**.
-3. **0.52 ≥ MIN_CONFIDENCE (0.40)** and cooldown clear → **JEV** gets context: species, confidence, past crow count, etc.
+2. BirdNET: *House Crow* **0.52** (above **0.12**) → up to 5 top species rows appended to **`detections.jsonl`**; WAVs **kept**.
+3. **0.52 ≥ MIN_CONFIDENCE (0.35)** and cooldown clear → **JEV** gets context: species, confidence, past crow count, etc.
 4. Jev returns high “surface” score → **WildlifeEvent** with `jev_reason` like `jev: confident detection (p=0.72)`.
-5. UI: **12 s hero** (photo, name, clip) + card in **Your bird log** under *House Crow*.
+5. UI: new card on **Observer** reel + optional **Noticed** badge.
 
 **08:06 — Same crow, weaker slice**
 
-- BirdNET: *House Crow* **0.22** → **logged** (≥ **0.18**), WAVs kept.
-- **0.22 < MIN_CONFIDENCE (0.40)** → **no hero**; JEV is not asked for surfacing.
-- The species card can still gain another line under **See more**.
+- BirdNET: *House Crow* **0.22** → **logged** (≥ **0.12**), WAVs kept.
+- **0.22 < MIN_CONFIDENCE (0.35)** → **no hero / Noticed**; JEV is not asked for surfacing.
+- **See details** on the card shows the full timeline.
 
 **08:07 — Another strong crow (within 5 minutes)**
 
-- **0.48**, logged, passes **0.40**, but **within 5 min** of last surface → **cooldown** blocks hero. Still logged.
+- **0.48**, logged, passes **0.35**, but **within 5 min** of last surface → **cooldown** blocks hero. Still logged.
 
 **08:12 — First time Rose-ringed Parakeet flies past**
 
@@ -138,11 +138,13 @@ On Jev API failure, surfacing **falls back** to rule-based behavior for that seg
 
 - BirdNET might score *Tawny Owl* high on audio alone, but **`BIRDNET_USE_GEO`** drops non-local species → **no prediction** → **WAVs deleted**, nothing in log.
 
-**09:00 — You open History**
+**09:00 — You open Logbook**
 
-- Grouped cards: *House Crow* → “12 detections · See more” with timestamps and confidence; *Parakeet* with one clip.
+- Unique species sorted by recency; tap a row for the detection timeline.
 
 That loop runs 24/7 while the ESP32 streams and the backend stays up.
+
+**Construction / loud noise:** High **rms** on `/api/status` → `last_segment` with `logged: false` is normal — BirdNET often finds no bird in noisy 3 s windows even when you hear calls outside.
 
 ---
 
@@ -198,7 +200,7 @@ Open **http://localhost:5173**. The UI talks to **http://127.0.0.1:8000** (or yo
 curl -s http://127.0.0.1:8000/api/status | python3 -m json.tool
 ```
 
-Shows BirdNET mode, analysis window, thresholds, and `jev_active`.
+Shows BirdNET mode, analysis window, thresholds, `jev_active`, and **`last_segment`** (peak, rms, last log attempt).
 
 ---
 
@@ -208,16 +210,19 @@ Shows BirdNET mode, analysis window, thresholds, and `jev_active`.
 |------|---------|
 | `src/`, `include/`, `platformio.ini` | ESP32 firmware |
 | `backend/` | FastAPI + BirdNET + JEV |
-| `frontend/` | React UI |
-| `module.md` | Hardware setup |
-| `plan.md` | Product roadmap |
+| `frontend/` | React mobile UI |
+| `module.md` | Hardware setup (local; gitignored) |
+| `plan.md` | Product roadmap (local; gitignored) |
 
 ---
 
 ## Tuning tips
 
-- **Too many log lines:** raise `BIRDNET_MIN_CONF` (e.g. 0.20).
-- **Too many heroes:** raise `MIN_CONFIDENCE` and/or `JEV_SURFACE_THRESHOLD`; keep `JEV_MODE=llm`.
+Current defaults: **`BIRDNET_MIN_CONF=0.12`**, **`MIN_CONFIDENCE=0.35`**, **`JEV_SURFACE_THRESHOLD=0.55`**.
+
+- **Too many log lines:** raise `BIRDNET_MIN_CONF` (e.g. **0.18**).
+- **Too many heroes / Noticed badges:** raise `MIN_CONFIDENCE` (e.g. **0.40**) and/or `JEV_SURFACE_THRESHOLD`; keep `JEV_MODE=llm`.
+- **Too quiet / missing birds:** lower `BIRDNET_MIN_CONF` slightly or try `ANALYSIS_WINDOW_SECONDS=6` (restart backend).
 - **Too slow to react:** keep `ANALYSIS_WINDOW_SECONDS=3` (project default).
 - **Old WAV clutter:** only new segments auto-delete; prune `backend/data/recordings/` manually once if needed.
 

@@ -43,8 +43,8 @@ Analysis uses **`ANALYSIS_WINDOW_SECONDS=3`** (BirdNET’s native chunk size) so
 Set in `.env`:
 
 ```
-BIRDNET_MIN_CONF=0.18
-MIN_CONFIDENCE=0.40
+BIRDNET_MIN_CONF=0.12
+MIN_CONFIDENCE=0.35
 ANALYSIS_WINDOW_SECONDS=3
 ```
 
@@ -80,7 +80,7 @@ JEV_MODEL=jev-latest
 | GET | `/api/detections` | Raw detections |
 | GET | `/api/species` | Aggregated species list |
 | GET | `/api/events/stream` | SSE for live UI |
-| GET | `/api/status` | Health + mode |
+| GET | `/api/status` | Health, thresholds, `last_segment` diagnostics |
 
 Recordings land in `backend/data/recordings/`.
 
