@@ -1,18 +1,23 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 type Props = {
   open: boolean;
-  title: string;
-  eyebrow?: string;
+  label: string;
   onClose: () => void;
   children: ReactNode;
 };
 
-export function BottomSheet({ open, title, eyebrow, onClose, children }: Props) {
+const DISMISS_DRAG_PX = 90;
+
+export function BottomSheet({ open, label, onClose, children }: Props) {
+  const [dragY, setDragY] = useState(0);
+  const dragStart = useRef<number | null>(null);
+
   useEffect(() => {
     if (!open) {
       return;
     }
+    setDragY(0);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
@@ -30,19 +35,44 @@ export function BottomSheet({ open, title, eyebrow, onClose, children }: Props) 
     return null;
   }
 
+  const endDrag = () => {
+    if (dragStart.current === null) {
+      return;
+    }
+    dragStart.current = null;
+    if (dragY > DISMISS_DRAG_PX) {
+      onClose();
+    } else {
+      setDragY(0);
+    }
+  };
+
   return (
     <div className="sheet-root" role="presentation">
       <button type="button" className="sheet-backdrop" aria-label="Close" onClick={onClose} />
-      <div className="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-        <header className="sheet-header">
-          <div>
-            {eyebrow && <span className="sheet-eyebrow">{eyebrow}</span>}
-            <h2 id="sheet-title">{title}</h2>
-          </div>
-          <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
+      <div
+        className={dragStart.current === null ? "sheet-panel" : "sheet-panel is-dragging"}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        style={dragY ? { transform: `translateY(${dragY}px)` } : undefined}
+      >
+        <div
+          className="sheet-grab"
+          onPointerDown={(e) => {
+            dragStart.current = e.clientY;
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (dragStart.current !== null) {
+              setDragY(Math.max(0, e.clientY - dragStart.current));
+            }
+          }}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        >
+          <span className="sheet-handle" aria-hidden />
+        </div>
         <div className="sheet-body">{children}</div>
       </div>
     </div>

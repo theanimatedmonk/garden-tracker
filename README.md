@@ -71,7 +71,7 @@ Controls which BirdNET hits become **detections** (bird log cards + JSONL). Also
 
 | Env variable | Default (project) | Meaning |
 |--------------|-------------------|---------|
-| **`BIRDNET_MIN_CONF`** | **0.12** | Minimum BirdNET confidence to accept a species for this segment. Below → **no detection**, **WAVs deleted**. |
+| **`BIRDNET_MIN_CONF`** | **0.18** | Minimum BirdNET confidence to accept a species for this segment. Below → **no detection**, **WAVs deleted**. |
 | **`BIRDNET_USE_GEO`** | `true` | Drop species unlikely near `BIRDNET_LAT` / `BIRDNET_LON`. |
 | **`ANALYSIS_WINDOW_SECONDS`** | **3** | Seconds of audio buffered before one BirdNET run (BirdNET-friendly; fast UI). |
 
@@ -109,19 +109,19 @@ On Jev API failure, surfacing **falls back** to rule-based behavior for that seg
 **08:00 — Quiet room**
 
 - ESP32 sends ~1 s of PCM every second. Backend fills a **3 s** buffer.
-- BirdNET hears mostly room tone; nothing ≥ **0.12** → **no log row**, **WAVs deleted**. UI stays on “Listening…”.
+- BirdNET hears mostly room tone; nothing ≥ **0.18** → **no log row**, **WAVs deleted**. UI stays on “Listening…”.
 
 **08:04 — House Crow calls outside (strong)**
 
 1. Buffer fills; backend saves `abc123.wav` + `abc123_48k.wav`.
-2. BirdNET: *House Crow* **0.52** (above **0.12**) → up to 5 top species rows appended to **`detections.jsonl`**; WAVs **kept**.
+2. BirdNET: *House Crow* **0.52** (above **0.18**) → up to 5 top species rows appended to **`detections.jsonl`**; WAVs **kept**.
 3. **0.52 ≥ MIN_CONFIDENCE (0.35)** and cooldown clear → **JEV** gets context: species, confidence, past crow count, etc.
 4. Jev returns high “surface” score → **WildlifeEvent** with `jev_reason` like `jev: confident detection (p=0.72)`.
 5. UI: new card on **Observer** reel + optional **Noticed** badge.
 
 **08:06 — Same crow, weaker slice**
 
-- BirdNET: *House Crow* **0.22** → **logged** (≥ **0.12**), WAVs kept.
+- BirdNET: *House Crow* **0.22** → **logged** (≥ **0.18**), WAVs kept.
 - **0.22 < MIN_CONFIDENCE (0.35)** → **no hero / Noticed**; JEV is not asked for surfacing.
 - **See details** on the card shows the full timeline.
 
@@ -218,7 +218,7 @@ Shows BirdNET mode, analysis window, thresholds, `jev_active`, and **`last_segme
 
 ## Tuning tips
 
-Current defaults: **`BIRDNET_MIN_CONF=0.12`**, **`MIN_CONFIDENCE=0.35`**, **`JEV_SURFACE_THRESHOLD=0.55`**.
+Current defaults: **`BIRDNET_MIN_CONF=0.18`**, **`MIN_CONFIDENCE=0.35`**, **`JEV_SURFACE_THRESHOLD=0.55`**.
 
 - **Too many log lines:** raise `BIRDNET_MIN_CONF` (e.g. **0.18**).
 - **Too many heroes / Noticed badges:** raise `MIN_CONFIDENCE` (e.g. **0.40**) and/or `JEV_SURFACE_THRESHOLD`; keep `JEV_MODE=llm`.

@@ -43,7 +43,7 @@ Analysis uses **`ANALYSIS_WINDOW_SECONDS=3`** (BirdNET’s native chunk size) so
 Set in `.env`:
 
 ```
-BIRDNET_MIN_CONF=0.12
+BIRDNET_MIN_CONF=0.18
 MIN_CONFIDENCE=0.35
 ANALYSIS_WINDOW_SECONDS=3
 ```
