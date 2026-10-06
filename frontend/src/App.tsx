@@ -1,124 +1,94 @@
-import { useEffect, useRef, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
-import { api, apiUrl } from "./api/client";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { AudioProvider } from "./audio/AudioProvider";
+import { BookIcon, MicIcon, RadarIcon } from "./components/Icons";
+import { DetectionsProvider, useStream } from "./data/DetectionsProvider";
+import { speakHeroFound } from "./utils/heroVoice";
 import { LogbookPage } from "./pages/LogbookPage";
 import { ObserverPage } from "./pages/ObserverPage";
 import { SoundscapePage } from "./pages/SoundscapePage";
 
-const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? "dex-btn active" : "dex-btn");
+type TabDef = {
+  path: string;
+  label: string;
+  icon: ReactNode;
+  render: (active: boolean) => ReactNode;
+};
 
-/** Device chrome: lens blinks and a toast pops on every live detection; green LED tracks backend health. */
-function useDexSignals() {
-  const [online, setOnline] = useState<boolean | null>(null);
-  const [encounter, setEncounter] = useState<{ species: string; key: number } | null>(null);
+const TABS: TabDef[] = [
+  { path: "/", label: "Scan", icon: <MicIcon />, render: (active) => <ObserverPage active={active} /> },
+  { path: "/soundscape", label: "Radar", icon: <RadarIcon />, render: () => <SoundscapePage /> },
+  { path: "/logbook", label: "Logbook", icon: <BookIcon />, render: () => <LogbookPage /> },
+];
+
+/** Announces surfaced (hero) events by voice and with a toast, on every page. */
+function useHeroFound() {
+  const [found, setFound] = useState<{ species: string; key: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
-  useEffect(() => {
-    const check = () =>
-      api
-        .status()
-        .then((s) => setOnline(s.ok))
-        .catch(() => setOnline(false));
-    check();
-    const id = window.setInterval(check, 15000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    const source = new EventSource(apiUrl("/api/events/stream"));
-    source.onmessage = (msg) => {
-      try {
-        const data = JSON.parse(msg.data) as { type?: string; species?: string };
-        if (data.type !== "detection" || !data.species) {
-          return;
-        }
-        setEncounter({ species: data.species, key: Date.now() });
-        window.clearTimeout(timer.current);
-        timer.current = window.setTimeout(() => setEncounter(null), 4000);
-      } catch {
-        /* ignore */
-      }
-    };
-    return () => {
-      source.close();
+  useStream((data) => {
+    if (data.type === "event" && data.species && data.surface !== false) {
+      speakHeroFound(data.species);
+      setFound({ species: data.species, key: Date.now() });
       window.clearTimeout(timer.current);
-    };
-  }, []);
+      timer.current = window.setTimeout(() => setFound(null), 4000);
+    }
+  });
+  useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  return { online, encounter };
+  return found;
 }
 
-export default function App() {
-  const { online, encounter } = useDexSignals();
-  const ledState = online === null ? "" : online ? "on" : "fault";
+/**
+ * Tabs mount on first visit and then stay mounted, hidden while inactive: switching back is
+ * instant (no Rive reload, no refetch flash) and each tab keeps its own scroll position.
+ */
+function Shell() {
+  const found = useHeroFound();
+  const { pathname } = useLocation();
+  const current = TABS.find((t) => t.path === pathname) ?? TABS[0];
+  const [visited, setVisited] = useState<Set<string>>(() => new Set([current.path]));
+
+  useEffect(() => {
+    setVisited((prev) => (prev.has(current.path) ? prev : new Set(prev).add(current.path)));
+  }, [current.path]);
 
   return (
-    <div className="dex">
-      <header className="dex-top">
-        <span className={encounter ? "dex-lens ping" : "dex-lens"} aria-hidden>
-          <span className="dex-lens-glint" />
-        </span>
-        <span className="dex-leds" aria-hidden>
-          <span className={`dex-led red ${ledState === "fault" ? "blink" : ""}`} />
-          <span className={`dex-led yellow ${encounter ? "blink" : ""}`} />
-          <span className={`dex-led green ${ledState === "on" ? "on" : ""}`} />
-        </span>
-        <span className="dex-brand">
-          BIRD<span>DEX</span>
-        </span>
-      </header>
-
-      <main className="dex-body">
-        <div className="dex-bezel">
-          <span className="bezel-dots" aria-hidden>
-            <i />
-            <i />
-          </span>
-          <div className="dex-screen">
-            <Routes>
-              <Route path="/" element={<ObserverPage />} />
-              <Route path="/soundscape" element={<SoundscapePage />} />
-              <Route path="/logbook" element={<LogbookPage />} />
-            </Routes>
-          </div>
-          <span className="bezel-foot" aria-hidden>
-            <i className="bezel-power" />
-            <span className="bezel-grille">
-              <i />
-              <i />
-              <i />
-              <i />
-            </span>
-          </span>
-        </div>
+    <div className="app">
+      <main className="app-main">
+        {TABS.map((tab) =>
+          tab === current || visited.has(tab.path) ? (
+            <div key={tab.path} className="tab-page" hidden={tab !== current}>
+              {tab.render(tab === current)}
+            </div>
+          ) : null,
+        )}
       </main>
 
-      {encounter && (
-        <div key={encounter.key} className="dex-toast" role="status">
-          A wild <strong>{encounter.species}</strong> appeared!
+      {found && (
+        <div key={found.key} className="toast" role="status">
+          Bird found! It&apos;s a <strong>{found.species}</strong>
         </div>
       )}
 
-      <nav className="dex-nav" aria-label="Main">
-        <NavLink to="/" end className={navClass}>
-          <span className="dex-btn-icon" aria-hidden>
-            ◉
-          </span>
-          Scan
-        </NavLink>
-        <NavLink to="/soundscape" className={navClass}>
-          <span className="dex-btn-icon" aria-hidden>
-            ◔
-          </span>
-          Radar
-        </NavLink>
-        <NavLink to="/logbook" className={navClass}>
-          <span className="dex-btn-icon" aria-hidden>
-            ▦
-          </span>
-          Dex
-        </NavLink>
+      <nav className="tabbar" aria-label="Main">
+        {TABS.map((tab) => (
+          <NavLink key={tab.path} to={tab.path} end className={tab === current ? "tab active" : "tab"}>
+            {tab.icon}
+            <span>{tab.label}</span>
+          </NavLink>
+        ))}
       </nav>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <DetectionsProvider>
+      <AudioProvider>
+        <Shell />
+      </AudioProvider>
+    </DetectionsProvider>
   );
 }

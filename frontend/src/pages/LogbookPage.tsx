@@ -1,38 +1,67 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, type Detection } from "../api/client";
-import { DexEntrySheet } from "../components/DexEntrySheet";
-import { SpeciesSprite } from "../components/DexParts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { formatDate, formatWhen } from "../api/client";
+import { CallFilterChip } from "../components/CallFilterChip";
+import { DateRangeSheet } from "../components/DateRangeSheet";
+import { CalendarIcon } from "../components/Icons";
+import { SpeciesCard } from "../components/SpeciesCard";
+import { SpeciesSheet } from "../components/SpeciesSheet";
+import { useDetections } from "../data/DetectionsProvider";
 import {
-  assignDexNumbers,
   filterDetectionsByDateRange,
-  formatDexNo,
   groupDetectionsBySpecies,
+  matchesTier,
   parseDateInput,
-  type SpeciesGroup,
+  type TierFilter,
 } from "../utils/detections";
 
-type SortMode = "number" | "recent";
+type SortMode = "recent" | "calls" | "name";
+
+const SORTS: Array<{ id: SortMode; label: string }> = [
+  { id: "recent", label: "Recent" },
+  { id: "calls", label: "Most heard" },
+  { id: "name", label: "A–Z" },
+];
+
+/** Marks a horizontally scrolling row with `has-more` while content is hidden past its right edge. */
+function useOverflowHint<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    const update = () => el.classList.toggle("has-more", el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    update();
+    const resize = new ResizeObserver(update);
+    resize.observe(el);
+    el.addEventListener("scroll", update, { passive: true });
+    return () => {
+      resize.disconnect();
+      el.removeEventListener("scroll", update);
+    };
+  }, []);
+  return ref;
+}
 
 export function LogbookPage() {
-  const [detections, setDetections] = useState<Detection[]>([]);
+  const { detections, loaded } = useDetections();
   const [query, setQuery] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [sort, setSort] = useState<SortMode>("number");
-  const [sheetGroup, setSheetGroup] = useState<SpeciesGroup | null>(null);
+  const [sort, setSort] = useState<SortMode>("recent");
+  const [tier, setTier] = useState<TierFilter>("all");
+  const [datesOpen, setDatesOpen] = useState(false);
+  const [sheetSpecies, setSheetSpecies] = useState<string | null>(null);
+  const chipRow = useOverflowHint<HTMLDivElement>();
 
-  useEffect(() => {
-    const load = () => api.detections(500).then(({ detections: list }) => setDetections(list));
-    load();
-    const id = window.setInterval(load, 8000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  // Numbers come from the unfiltered log so an entry keeps its number while filtering.
-  const dexNos = useMemo(() => assignDexNumbers(detections), [detections]);
+  // The sheet always shows a species' whole history (it has its own call filter), kept live.
+  const sheetGroup = useMemo(
+    () => (sheetSpecies ? (groupDetectionsBySpecies(detections).find((g) => g.species === sheetSpecies) ?? null) : null),
+    [detections, sheetSpecies],
+  );
 
   const filtered = useMemo(() => {
-    let list = detections;
+    let list = detections.filter((d) => matchesTier(d, tier));
     if (fromDate) {
       list = filterDetectionsByDateRange(list, parseDateInput(fromDate), null);
     }
@@ -40,7 +69,7 @@ export function LogbookPage() {
       list = filterDetectionsByDateRange(list, null, parseDateInput(toDate));
     }
     return list;
-  }, [detections, fromDate, toDate]);
+  }, [detections, tier, fromDate, toDate]);
 
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -49,104 +78,94 @@ export function LogbookPage() {
       list = list.filter(
         (g) =>
           g.species.toLowerCase().includes(q) ||
-          (g.scientific_name?.toLowerCase().includes(q) ?? false) ||
-          formatDexNo(dexNos.get(g.species)).includes(q),
+          (g.scientific_name?.toLowerCase().includes(q) ?? false),
       );
     }
-    if (sort === "number") {
-      list = [...list].sort((a, b) => (dexNos.get(a.species) ?? 0) - (dexNos.get(b.species) ?? 0));
+    if (sort === "calls") {
+      list = [...list].sort((a, b) => b.detections.length - a.detections.length);
+    } else if (sort === "name") {
+      list = [...list].sort((a, b) => a.species.localeCompare(b.species));
     }
     return list;
-  }, [filtered, query, sort, dexNos]);
+  }, [filtered, query, sort]);
+
+  const hasDates = Boolean(fromDate || toDate);
+  const dayLabel = (value: string) => formatDate(parseDateInput(value).toISOString());
+  const rangeLabel = hasDates
+    ? `${fromDate ? dayLabel(fromDate) : "Start"} – ${toDate ? dayLabel(toDate) : "Today"}`
+    : null;
 
   return (
-    <section className="mobile-page logbook-page">
+    <section className="page">
       <header className="page-header">
-        <h1 className="pixel">Dex</h1>
-        <p className="dex-counter">
-          <span>Seen</span>
-          <strong>{String(dexNos.size).padStart(3, "0")}</strong>
+        <h1>Logbook</h1>
+        <p>
+          {groups.length} species collected
+          {rangeLabel && ` · ${rangeLabel}`}
         </p>
       </header>
 
-      <div className="filter-stack">
+      <div className="filters">
         <input
           type="search"
-          className="field-input"
-          aria-label="Search"
-          placeholder="Search name or #no…"
+          className="input"
+          aria-label="Search species"
+          placeholder="Search species"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <div className="filter-row">
-          <label className="field-label">
-            From
-            <input
-              type="date"
-              className="field-input"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-            />
-          </label>
-          <label className="field-label">
-            To
-            <input
-              type="date"
-              className="field-input"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-            />
-          </label>
-        </div>
         <div className="filter-bar">
-          <div className="segmented" role="group" aria-label="Sort">
-            <button type="button" aria-pressed={sort === "number"} onClick={() => setSort("number")}>
-              No.
-            </button>
-            <button type="button" aria-pressed={sort === "recent"} onClick={() => setSort("recent")}>
-              Recent
-            </button>
+          <div ref={chipRow} className="chip-scroll" role="group" aria-label="Sort and filter">
+            {SORTS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="chip"
+                aria-pressed={sort === s.id}
+                onClick={() => setSort(s.id)}
+              >
+                {s.label}
+              </button>
+            ))}
+            <CallFilterChip value={tier} onChange={setTier} />
           </div>
-          {(fromDate || toDate || query) && (
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={() => {
-                setFromDate("");
-                setToDate("");
-                setQuery("");
-              }}
-            >
-              Clear filters
-            </button>
-          )}
+          <button
+            type="button"
+            className="chip chip-icon"
+            aria-label={rangeLabel ? `Dates: ${rangeLabel}` : "Filter by date"}
+            aria-pressed={hasDates}
+            onClick={() => setDatesOpen(true)}
+          >
+            <CalendarIcon />
+          </button>
         </div>
       </div>
 
-      <ul className="dex-grid">
+      <ul className="collection">
         {groups.map((g) => (
           <li key={g.species}>
-            <button
-              type="button"
-              className={g.hasSurfaced ? "dex-card noticed" : "dex-card"}
-              onClick={() => setSheetGroup(g)}
-            >
-              <span className="dex-card-no pixel">{formatDexNo(dexNos.get(g.species))}</span>
-              <SpeciesSprite src={g.image_url} className="dex-card-sprite" />
-              <strong className="dex-card-name">{g.species}</strong>
-              <span className="dex-card-meta">
-                {g.detections.length} {g.detections.length === 1 ? "call" : "calls"}
+            <button type="button" className="collection-item" onClick={() => setSheetSpecies(g.species)}>
+              <SpeciesCard species={g.species} imageUrl={g.image_url} size="sm" />
+              <strong>{g.species}</strong>
+              <span>
+                {g.detections.length} {g.detections.length === 1 ? "call" : "calls"} · {formatWhen(g.lastHeard)}
               </span>
             </button>
           </li>
         ))}
-        {groups.length === 0 && <li className="empty grid-empty">No entries match your filters.</li>}
+        {loaded && groups.length === 0 && <li className="empty-note">No species match your filters.</li>}
       </ul>
 
-      <DexEntrySheet
-        group={sheetGroup}
-        dexNo={sheetGroup ? dexNos.get(sheetGroup.species) : undefined}
-        onClose={() => setSheetGroup(null)}
+      <SpeciesSheet group={sheetGroup} onClose={() => setSheetSpecies(null)} />
+      <DateRangeSheet
+        open={datesOpen}
+        from={fromDate}
+        to={toDate}
+        onApply={(from, to) => {
+          setFromDate(from);
+          setToDate(to);
+        }}
+        onClose={() => setDatesOpen(false)}
       />
     </section>
   );

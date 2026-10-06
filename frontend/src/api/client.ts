@@ -10,6 +10,12 @@ export type WildlifeEvent = {
   image_url?: string | null;
 };
 
+export type ImageCredit = {
+  text: string;
+  source: string;
+  url: string | null;
+};
+
 export type Detection = {
   id: string;
   species: string;
@@ -21,6 +27,7 @@ export type Detection = {
   model: string;
   surfaced?: boolean;
   image_url?: string | null;
+  image_credit?: ImageCredit | null;
 };
 
 export type SpeciesSummary = {
@@ -111,9 +118,18 @@ export const api = {
 };
 
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+/** "Today, 22:10" / "Yesterday, 08:05" / "4 Oct, 22:10" */
+export function formatWhen(iso: string): string {
+  const d = new Date(iso);
+  const dayStart = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const daysAgo = Math.round((dayStart(new Date()) - dayStart(d)) / 86_400_000);
+  const day = daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : formatDate(iso);
+  return `${day}, ${formatTime(iso)}`;
 }

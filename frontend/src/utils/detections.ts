@@ -1,9 +1,10 @@
-import type { Detection } from "../api/client";
+import type { Detection, ImageCredit } from "../api/client";
 
 export type SpeciesGroup = {
   species: string;
   scientific_name: string | null;
   image_url: string | null;
+  image_credit: ImageCredit | null;
   detections: Detection[];
   lastHeard: string;
   bestDetection: Detection;
@@ -22,10 +23,12 @@ export function groupDetectionsBySpecies(detections: Detection[]): SpeciesGroup[
   for (const [species, list] of map) {
     list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     const bestDetection = [...list].sort((a, b) => b.confidence - a.confidence)[0];
+    const withImage = list.find((d) => d.image_url);
     groups.push({
       species,
       scientific_name: list[0].scientific_name,
-      image_url: list.find((d) => d.image_url)?.image_url ?? list[0].image_url,
+      image_url: withImage?.image_url ?? null,
+      image_credit: withImage?.image_credit ?? null,
       detections: list,
       lastHeard: list[0].timestamp,
       bestDetection,
@@ -87,40 +90,44 @@ export function parseDateInput(value: string): Date {
   return new Date(y, m - 1, d);
 }
 
-/** Dex numbers in discovery order: the first species ever heard is #001. */
-export function assignDexNumbers(detections: Detection[]): Map<string, number> {
-  const firstHeard = new Map<string, number>();
-  for (const d of detections) {
-    const t = new Date(d.timestamp).getTime();
-    const prev = firstHeard.get(d.species);
-    if (prev === undefined || t < prev) {
-      firstHeard.set(d.species, t);
-    }
-  }
-  const ordered = [...firstHeard.entries()].sort((a, b) => a[1] - b[1]);
-  return new Map(ordered.map(([species], i) => [species, i + 1]));
-}
 
-export function formatDexNo(n: number | undefined): string {
-  return n ? `#${String(n).padStart(3, "0")}` : "#???";
-}
+export type ConfidenceTier = {
+  label: string;
+  hint: string;
+  tone: "clear" | "likely" | "faint";
+};
 
-export type ConfidenceTier = { label: string; tone: "clear" | "likely" | "faint" };
-
+/** Plain-language stand-in for BirdNET's confidence score; users never see the number. */
 export function confidenceTier(confidence: number): ConfidenceTier {
   if (confidence >= 0.85) {
-    return { label: "Clear call", tone: "clear" };
+    return { label: "Clear Call", hint: "Loud and unmistakable", tone: "clear" };
   }
   if (confidence >= 0.6) {
-    return { label: "Likely", tone: "likely" };
+    return { label: "Likely", hint: "Probably this bird", tone: "likely" };
   }
-  return { label: "Faint", tone: "faint" };
+  return { label: "Faint", hint: "Distant or partly masked — could be a lookalike", tone: "faint" };
 }
 
-export function firstHeard(group: SpeciesGroup): string {
-  return group.detections[group.detections.length - 1].timestamp;
+export type TierFilter = "all" | ConfidenceTier["tone"];
+
+export const TIER_FILTERS: Array<{ id: TierFilter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "clear", label: "Clear Call" },
+  { id: "likely", label: "Likely" },
+  { id: "faint", label: "Faint" },
+];
+
+export function matchesTier(detection: Detection, filter: TierFilter): boolean {
+  return filter === "all" || confidenceTier(detection.confidence).tone === filter;
 }
 
-export function isFirstHeardToday(group: SpeciesGroup): boolean {
-  return startOfDay(new Date(firstHeard(group))).getTime() === startOfDay(new Date()).getTime();
+/** Open a call log on its best calls: Clear Call if there is one, else Likely, else everything. */
+export function defaultTierFilter(detections: Detection[]): TierFilter {
+  if (detections.some((d) => matchesTier(d, "clear"))) {
+    return "clear";
+  }
+  if (detections.some((d) => matchesTier(d, "likely"))) {
+    return "likely";
+  }
+  return "all";
 }

@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, type Detection } from "../api/client";
+import { useMemo, useState } from "react";
+import type { Detection } from "../api/client";
+import { SpeciesSheet } from "../components/SpeciesSheet";
+import { useDetections } from "../data/DetectionsProvider";
 import {
-  assignDexNumbers,
   filterDetectionsByDay,
-  formatDexNo,
   groupDetectionsBySpecies,
   parseDateInput,
   toDateInputValue,
+  type SpeciesGroup,
 } from "../utils/detections";
 
 type HourBucket = {
@@ -16,15 +17,9 @@ type HourBucket = {
 };
 
 export function SoundscapePage() {
-  const [detections, setDetections] = useState<Detection[]>([]);
+  const { detections, loaded } = useDetections();
   const [day, setDay] = useState(() => toDateInputValue(new Date()));
-
-  useEffect(() => {
-    const load = () => api.detections(500).then(({ detections: list }) => setDetections(list));
-    load();
-    const id = window.setInterval(load, 10000);
-    return () => window.clearInterval(id);
-  }, []);
+  const [sheetGroup, setSheetGroup] = useState<SpeciesGroup | null>(null);
 
   const dayDetections = useMemo(
     () => filterDetectionsByDay(detections, parseDateInput(day)),
@@ -38,8 +33,7 @@ export function SoundscapePage() {
       species: new Map(),
     }));
     for (const d of dayDetections) {
-      const hour = new Date(d.timestamp).getHours();
-      const bucket = hours[hour];
+      const bucket = hours[new Date(d.timestamp).getHours()];
       bucket.detections.push(d);
       const prev = bucket.species.get(d.species);
       bucket.species.set(d.species, {
@@ -50,75 +44,74 @@ export function SoundscapePage() {
     return hours;
   }, [dayDetections]);
 
-  const maxCount = Math.max(1, ...buckets.map((b) => b.detections.length));
   const daySpecies = useMemo(() => groupDetectionsBySpecies(dayDetections), [dayDetections]);
-  const dexNos = useMemo(() => assignDexNumbers(detections), [detections]);
+  const maxCount = Math.max(1, ...buckets.map((b) => b.detections.length));
+  const busiest = buckets.reduce((a, b) => (b.detections.length > a.detections.length ? b : a));
 
   return (
-    <section className="mobile-page soundscape-page">
+    <section className="page">
       <header className="page-header">
-        <h1 className="pixel">Radar</h1>
-        <p className="lede">
+        <h1>Radar</h1>
+        <p>
           {daySpecies.length} species · {dayDetections.length} calls
+          {busiest.detections.length > 0 && ` · busiest around ${String(busiest.hour).padStart(2, "0")}:00`}
         </p>
       </header>
 
-      <label className="field-label">
-        Day
-        <input
-          type="date"
-          className="field-input"
-          value={day}
-          max={toDateInputValue(new Date())}
-          onChange={(e) => setDay(e.target.value)}
-        />
-      </label>
+      <input
+        type="date"
+        className="input day-input"
+        aria-label="Day"
+        value={day}
+        max={toDateInputValue(new Date())}
+        onChange={(e) => setDay(e.target.value)}
+      />
 
-      <div className="soundscape-graph" role="img" aria-label="Hourly bird activity">
-        <div className="graph-bars">
+      <div className="radar-chart" role="img" aria-label="Bird calls per hour">
+        <div className="radar-bars">
           {buckets.map((b) => {
-            const height = b.detections.length ? Math.max(12, (b.detections.length / maxCount) * 100) : 4;
+            const height = b.detections.length ? Math.max(10, (b.detections.length / maxCount) * 100) : 3;
             return (
-              <div key={b.hour} className="graph-col">
-                <div className="graph-avatars">
-                  {[...b.species.entries()].slice(0, 4).map(([name, info]) => (
-                    <span
-                      key={name}
-                      className="graph-avatar"
-                      title={`${name} (${info.count})`}
-                      style={
-                        info.image
-                          ? { backgroundImage: `url(${info.image})` }
-                          : undefined
-                      }
-                    >
-                      {!info.image && "?"}
-                    </span>
-                  ))}
+              <div key={b.hour} className="radar-col">
+                <div className="radar-track">
+                  <div className={b.detections.length ? "radar-bar" : "radar-bar idle"} style={{ height: `${height}%` }}>
+                    <div className="radar-avatars">
+                      {[...b.species.entries()].slice(0, 3).map(([name, info]) => (
+                        <span
+                          key={name}
+                          className="radar-avatar"
+                          title={`${name} (${info.count})`}
+                          style={info.image ? { backgroundImage: `url(${info.image})` } : undefined}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className={b.detections.length ? "graph-bar" : "graph-bar idle"} style={{ height: `${height}%` }} />
-                <span className="graph-hour">{String(b.hour).padStart(2, "0")}</span>
+                <span className="radar-hour">{b.hour % 6 === 0 ? String(b.hour).padStart(2, "0") : ""}</span>
               </div>
             );
           })}
         </div>
       </div>
 
-      <ul className="soundscape-legend">
-        {daySpecies.slice(0, 12).map((g) => (
+      <h2 className="section-title">Heard this day</h2>
+      <ul className="species-rows">
+        {daySpecies.map((g) => (
           <li key={g.species}>
-            <span className="legend-no pixel">{formatDexNo(dexNos.get(g.species))}</span>
-            {g.image_url ? (
-              <img src={g.image_url} alt="" className="legend-avatar" />
-            ) : (
-              <span className="legend-avatar legend-fallback">?</span>
-            )}
-            <span>{g.species}</span>
-            <span className="legend-count">{g.detections.length}</span>
+            <button type="button" className="species-row" onClick={() => setSheetGroup(g)}>
+              <span
+                className="species-row-avatar"
+                style={g.image_url ? { backgroundImage: `url(${g.image_url})` } : undefined}
+              />
+              <span className="species-row-name">{g.species}</span>
+              <span className="count-pill">{g.detections.length}</span>
+            </button>
           </li>
         ))}
-        {dayDetections.length === 0 && <li className="empty">No detections on this day.</li>}
+        {loaded && dayDetections.length === 0 && <li className="empty-note">No birds heard on this day.</li>}
       </ul>
+
+      <SpeciesSheet group={sheetGroup} onClose={() => setSheetGroup(null)} />
     </section>
   );
 }

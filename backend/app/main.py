@@ -15,6 +15,7 @@ from app.audio_utils import AudioSegmentBuffer, pcm_stats, resample_pcm_int16, s
 from app.birdnet_runner import birdnet_runner
 from app.config import settings
 from app.event_processor import event_processor
+from app.species_images import attach_image, request_species_image
 from app.species_images import configure_cache as configure_image_cache
 from app.store import WildlifeEvent, store
 
@@ -167,7 +168,7 @@ async def analyze_and_notify(segment: bytes, device_id: str) -> None:
         return
 
     for det in new_detections:
-        await broadcast_message({"type": "detection", **det})
+        await broadcast_message({"type": "detection", **attach_image(det)})
     if event is not None:
         ev_payload = event.to_dict()
         match = next((d for d in new_detections if d["id"] == event.detection_id), None)
@@ -203,7 +204,7 @@ def status() -> dict:
 
 @app.get("/api/detections")
 def list_detections(limit: int = 200) -> dict:
-    return {"detections": store.list_detections(limit)}
+    return {"detections": [attach_image(d) for d in store.list_detections(limit)]}
 
 
 @app.get("/api/events")
@@ -294,3 +295,5 @@ def on_startup() -> None:
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     store.configure_persistence(DETECTIONS_LOG, EVENTS_LOG)
     configure_image_cache(IMAGE_CACHE)
+    for species in store.list_species():
+        request_species_image(species["name"], species.get("scientific_name"))
