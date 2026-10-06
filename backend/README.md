@@ -36,14 +36,12 @@ Find your laptop LAN IP (`ipconfig getifaddr en0` on macOS) and set `BACKEND_HOS
 pip install -r requirements.txt
 ```
 
-BirdNET does **not** return photos. The backend attaches **`image_url`** per species using [Wikipedia](https://www.mediawiki.org/wiki/API:REST_API) thumbnails (cached on disk). Some obscure species may have no image.
-
 Analysis uses **`ANALYSIS_WINDOW_SECONDS=3`** (BirdNET’s native chunk size) so phone tests align faster than 10 s buffers.
 
 Set in `.env`:
 
 ```
-BIRDNET_MIN_CONF=0.18
+BIRDNET_MIN_CONF=0.20
 MIN_CONFIDENCE=0.35
 ANALYSIS_WINDOW_SECONDS=3
 ```
@@ -53,6 +51,15 @@ Adjust `BIRDNET_LAT` / `BIRDNET_LON` to your location so BirdNET filters to spec
 Phone playback of non-local species (e.g. a European owl clip) may score in BirdNET but **won’t** appear when `BIRDNET_USE_GEO=true` — real window birds will.
 
 Segments with **no BirdNET match** delete their `.wav` and `_48k.wav` files automatically (no disk clutter).
+
+## Species photos
+
+BirdNET does **not** return photos, so `app/species_images.py` finds one per species:
+
+1. **Wikipedia** article thumbnail (scientific name first, then common name) — small and quick to load.
+2. **iNaturalist** as a fallback when the article has no image: exact name match only, a portrait photo preferred, 1024 px. Only licences that allow reuse **and** restyling are accepted (CC0, CC BY, BY-SA, BY-NC, BY-NC-SA); "all rights reserved" and no-derivatives photos are skipped, because the app's card restyles the photo.
+
+Results are cached in `data/history/image_cache.json` with the credit line each licence asks for. The cache is versioned (`CACHE_VERSION`): changing the lookup order or sources rebuilds it automatically. `/api/detections` and the live stream attach each species' current photo as `image_url` plus `image_credit` (`text`, `source`, `url`), so old detections pick up new photos too. Species not cached yet are looked up by a background worker (about 1 request/second, iNaturalist's limit) — requests never wait on the network — and every logged species is queued at startup.
 
 ## JEV (judgment / “what to surface”)
 
@@ -77,13 +84,14 @@ JEV_MODEL=jev-latest
 | POST | `/api/ingest/audio` | Raw PCM from ESP32 |
 | POST | `/api/ingest/heartbeat` | Device health |
 | GET | `/api/events` | Surfaced wildlife events |
-| GET | `/api/detections` | Raw detections |
+| GET | `/api/detections?limit=` | Detections, newest first, with `image_url` and `image_credit` |
 | GET | `/api/species` | Aggregated species list |
-| GET | `/api/events/stream` | SSE for live UI |
+| GET | `/api/events/stream` | SSE for live UI (`detection` and `event` messages) |
+| GET | `/api/recordings/{detection_id}` | WAV clip for a detection |
 | GET | `/api/status` | Health, thresholds, `last_segment` diagnostics |
 
 Recordings land in `backend/data/recordings/`.
 
 ## Supabase
 
-Not wired yet — data lives in memory plus WAV files on disk. Schema from `plan.md` will map here in a later phase.
+Not wired yet — history lives in `data/history/*.jsonl` (loaded into memory at startup) plus WAV files on disk. Schema from `plan.md` will map here in a later phase.

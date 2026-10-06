@@ -97,7 +97,7 @@ void loop() {
   if (sent) {
     Serial.printf("Sent %u samples  peak=%d  rms=%d\n", static_cast<unsigned>(n), peak, rms);
     if (peak < 50) {
-      Serial.println("  (very quiet — tap mic or play sound near it; check wiring in module.md)");
+      Serial.println("  (very quiet — tap mic or play sound near it; check wiring in architecture.md)");
     }
   } else {
     Serial.println("Upload failed");

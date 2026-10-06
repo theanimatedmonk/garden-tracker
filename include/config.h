@@ -1,6 +1,6 @@
 #pragma once
 
-// I2S pins for INMP441 (see module.md)
+// I2S pins for INMP441 (see architecture.md)
 #define I2S_BCK_PIN 26
 #define I2S_WS_PIN 25
 #define I2S_DATA_PIN 33

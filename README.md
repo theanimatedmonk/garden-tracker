@@ -1,8 +1,8 @@
 # Wildlife Observer
 
-A personal balcony/window **wildlife listener**: ESP32 + INMP441 mic streams audio over Wi‑Fi to your Mac, **BirdNET** identifies birds, **JEV** decides what deserves the big “visitor” moment, and a **React** UI shows a calm observer screen plus a saved bird log.
+A personal balcony/window **wildlife listener**: ESP32 + INMP441 mic streams audio over Wi‑Fi to your Mac, **BirdNET** identifies birds, **JEV** decides what deserves the big “visitor” moment, and a mobile **React** app shows each bird as an animated **Rive** card, plus an hourly radar and a logbook of everything heard.
 
-Hardware wiring and flash steps: **[module.md](module.md)**.
+How the whole system fits together, from microphone to app (including wiring): **[architecture.md](architecture.md)**.
 
 ---
 
@@ -25,8 +25,8 @@ Hardware wiring and flash steps: **[module.md](module.md)**.
            │  REST + EventSource
            ▼
     ┌──────────────┐
-    │   Frontend   │  Observer hero, grouped bird log, history pages
-    │   (Vite)     │
+    │   Frontend   │  Scan (Rive cards), Radar, Logbook
+    │ (React+Rive) │  phone browser on the LAN
     └──────────────┘
 ```
 
@@ -47,7 +47,7 @@ flowchart LR
 
 | Part | Location | Responsibility |
 |------|----------|----------------|
-| **INMP441** | Hardware | Digital MEMS mic; I²S to ESP32 (see [module.md](module.md)). |
+| **INMP441** | Hardware | Digital MEMS mic; I²S to ESP32 (see [architecture.md](architecture.md)). |
 | **ESP32 firmware** | `src/`, `include/` | Wi‑Fi, read mic at **16 kHz mono**, send **~1 s** PCM chunks to the backend, periodic heartbeat. Does **not** run BirdNET or store birds. |
 | **Ingest** | `backend/app/main.py` | Accepts PCM; accumulates until **3 s** of audio per device. |
 | **Segment WAV** | `backend/data/recordings/` | Saves `{uuid}.wav` (16 kHz) and `{uuid}_48k.wav` for analysis. |
@@ -55,7 +55,9 @@ flowchart LR
 | **Event processor** | `backend/app/event_processor.py` | Writes **detections** to history; optionally creates a **surfaced event** for the hero. |
 | **JEV** | `backend/app/jev_client.py` | When enabled, asks TypeSafe **Jev** whether to interrupt the UI (species already fixed by BirdNET). |
 | **Store** | `backend/app/store.py` | In-memory + `detections.jsonl` / `events.jsonl`; species summaries. |
-| **Frontend** | `frontend/` | Mobile UI: **Observer** (reel cards), **Soundscape** (day graph), **Logbook** (search + filters). |
+| **Species photos** | `backend/app/species_images.py` | Wikipedia thumbnail first, iNaturalist (reusable CC licences) as fallback; cached with photo credits. |
+| **Frontend** | `frontend/` | Mobile UI: **Scan** (Rive animal card per species), **Radar** (calls per hour), **Logbook** (grid + filters). See [frontend/README.md](frontend/README.md). |
+| **Rive card** | `frontend/public/rive/animal-card.riv` | Built from the Rive CLI project `~/Documents/rive-cli/animal-card`; photo, names and colour scheme are bound at runtime. |
 
 BirdNET **identifies**; JEV **judges attention**. JEV never changes the species label.
 
@@ -71,7 +73,7 @@ Controls which BirdNET hits become **detections** (bird log cards + JSONL). Also
 
 | Env variable | Default (project) | Meaning |
 |--------------|-------------------|---------|
-| **`BIRDNET_MIN_CONF`** | **0.18** | Minimum BirdNET confidence to accept a species for this segment. Below → **no detection**, **WAVs deleted**. |
+| **`BIRDNET_MIN_CONF`** | **0.20** | Minimum BirdNET confidence to accept a species for this segment. Below → **no detection**, **WAVs deleted**. |
 | **`BIRDNET_USE_GEO`** | `true` | Drop species unlikely near `BIRDNET_LAT` / `BIRDNET_LON`. |
 | **`ANALYSIS_WINDOW_SECONDS`** | **3** | Seconds of audio buffered before one BirdNET run (BirdNET-friendly; fast UI). |
 
@@ -100,6 +102,18 @@ On Jev API failure, surfacing **falls back** to rule-based behavior for that seg
 | `JEV_*` (LLM mode) | — | ✅ | — |
 | `EVENT_COOLDOWN_SECONDS` | — | ✅ | — |
 
+### Call labels in the app
+
+The app never shows BirdNET's raw score. Every logged call gets one of three labels instead:
+
+| Label | BirdNET score | What it tells the user | Colour in the app |
+|-------|---------------|------------------------|-------------------|
+| **Clear Call** | **≥ 0.85** | Loud and unmistakable | mint |
+| **Likely** | **0.60 to under 0.85** | Probably this bird | yellow |
+| **Faint** | **under 0.60** (down to the logging floor) | Distant or partly masked — could be a lookalike | grey |
+
+These are **display-only**, set in `confidenceTier` in [`frontend/src/utils/detections.ts`](frontend/src/utils/detections.ts). They don't change what is logged or surfaced — that is still `BIRDNET_MIN_CONF` and `MIN_CONFIDENCE` above.
+
 ---
 
 ## Continued example: one afternoon on the balcony
@@ -109,21 +123,21 @@ On Jev API failure, surfacing **falls back** to rule-based behavior for that seg
 **08:00 — Quiet room**
 
 - ESP32 sends ~1 s of PCM every second. Backend fills a **3 s** buffer.
-- BirdNET hears mostly room tone; nothing ≥ **0.18** → **no log row**, **WAVs deleted**. UI stays on “Listening…”.
+- BirdNET hears mostly room tone; nothing ≥ **0.20** → **no log row**, **WAVs deleted**. UI stays on “Listening…”.
 
 **08:04 — House Crow calls outside (strong)**
 
 1. Buffer fills; backend saves `abc123.wav` + `abc123_48k.wav`.
-2. BirdNET: *House Crow* **0.52** (above **0.18**) → up to 5 top species rows appended to **`detections.jsonl`**; WAVs **kept**.
+2. BirdNET: *House Crow* **0.52** (above **0.20**) → up to 5 top species rows appended to **`detections.jsonl`**; WAVs **kept**.
 3. **0.52 ≥ MIN_CONFIDENCE (0.35)** and cooldown clear → **JEV** gets context: species, confidence, past crow count, etc.
 4. Jev returns high “surface” score → **WildlifeEvent** with `jev_reason` like `jev: confident detection (p=0.72)`.
-5. UI: new card on **Observer** reel + optional **Noticed** badge.
+5. UI: the crow's card moves to the top of **Scan**, the status pill says “Heard a House Crow!”, and the surfaced event pops a “Bird found!” toast (also spoken aloud).
 
 **08:06 — Same crow, weaker slice**
 
-- BirdNET: *House Crow* **0.22** → **logged** (≥ **0.18**), WAVs kept.
+- BirdNET: *House Crow* **0.22** → **logged** (≥ **0.20**), WAVs kept.
 - **0.22 < MIN_CONFIDENCE (0.35)** → **no hero / Noticed**; JEV is not asked for surfacing.
-- **See details** on the card shows the full timeline.
+- In the app this call shows as **Faint** (users see Clear Call / Likely / Faint, never the score); the expand icon on the Scan pill opens the species sheet with the full call log.
 
 **08:07 — Another strong crow (within 5 minutes)**
 
@@ -132,7 +146,7 @@ On Jev API failure, surfacing **falls back** to rule-based behavior for that seg
 **08:12 — First time Rose-ringed Parakeet flies past**
 
 - BirdNET **0.53**, logged. First species in your log → JEV often surfaces with `new species for you`.
-- Hero plays again; log shows one card for *Parakeet* (single detection) or grouped later.
+- Hero plays again; Scan and Logbook get a new card for *Parakeet*.
 
 **08:15 — Phone plays a European owl clip**
 
@@ -140,7 +154,7 @@ On Jev API failure, surfacing **falls back** to rule-based behavior for that seg
 
 **09:00 — You open Logbook**
 
-- Unique species sorted by recency; tap a row for the detection timeline.
+- One card per species, sorted by recency (or Most heard / A–Z), filterable by call quality and date range; tap a card for its call log.
 
 That loop runs 24/7 while the ESP32 streams and the backend stays up.
 
@@ -167,7 +181,7 @@ Chunk size: **~1 s** of samples per upload (`SAMPLES_PER_CHUNK` in `include/conf
 |------|----------|
 | `backend/data/history/detections.jsonl` | Every logged detection |
 | `backend/data/history/events.jsonl` | Surfaced “visitor” events |
-| `backend/data/history/image_cache.json` | Wikipedia thumbnail URLs |
+| `backend/data/history/image_cache.json` | Species photo URLs and credits (versioned; rebuilt automatically when the lookup changes) |
 | `backend/data/recordings/*.wav` | Clips for logged segments only (orphans auto-deleted) |
 
 ---
@@ -190,9 +204,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 cd frontend && npm install && npm run dev
 ```
 
-Open **http://localhost:5173**. The UI talks to **http://127.0.0.1:8000** (or your LAN IP from another device).
+Open **http://localhost:5173** on the Mac (shown inside a phone frame), or **http://<mac-lan-ip>:5173** on your phone. The UI talks to port **8000** on the same host.
 
-**ESP32:** [module.md](module.md) — set `BACKEND_HOST`, copy `secrets.example.h` → `secrets.h`, `pio run -t upload`.
+**ESP32:** [architecture.md](architecture.md) — set `BACKEND_HOST`, copy `secrets.example.h` → `secrets.h`, `pio run -t upload`.
 
 **Health check**
 
@@ -210,17 +224,17 @@ Shows BirdNET mode, analysis window, thresholds, `jev_active`, and **`last_segme
 |------|---------|
 | `src/`, `include/`, `platformio.ini` | ESP32 firmware |
 | `backend/` | FastAPI + BirdNET + JEV |
-| `frontend/` | React mobile UI |
-| `module.md` | Hardware setup (local; gitignored) |
+| `frontend/` | React mobile UI (Rive card in `frontend/public/rive/`) |
+| `architecture.md` | The whole system in brief: hardware → backend → JEV → app |
 | `plan.md` | Product roadmap (local; gitignored) |
 
 ---
 
 ## Tuning tips
 
-Current defaults: **`BIRDNET_MIN_CONF=0.18`**, **`MIN_CONFIDENCE=0.35`**, **`JEV_SURFACE_THRESHOLD=0.55`**.
+Current defaults: **`BIRDNET_MIN_CONF=0.20`**, **`MIN_CONFIDENCE=0.35`**, **`JEV_SURFACE_THRESHOLD=0.55`**.
 
-- **Too many log lines:** raise `BIRDNET_MIN_CONF` (e.g. **0.18**).
+- **Too many log lines:** raise `BIRDNET_MIN_CONF` (e.g. **0.25**).
 - **Too many heroes / Noticed badges:** raise `MIN_CONFIDENCE` (e.g. **0.40**) and/or `JEV_SURFACE_THRESHOLD`; keep `JEV_MODE=llm`.
 - **Too quiet / missing birds:** lower `BIRDNET_MIN_CONF` slightly or try `ANALYSIS_WINDOW_SECONDS=6` (restart backend).
 - **Too slow to react:** keep `ANALYSIS_WINDOW_SECONDS=3` (project default).

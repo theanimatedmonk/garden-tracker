@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     birdnet_lat: float = 12.9716
     birdnet_lon: float = 77.5946
     birdnet_use_geo: bool = True
-    birdnet_min_conf: float = 0.18
+    birdnet_min_conf: float = 0.20
     history_predictions_per_segment: int = 5
 
     # Phase 5 JEV — optional LLM (Typesafe PAI). Rule-based JEV runs when key is empty.
