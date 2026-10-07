@@ -91,7 +91,7 @@ BirdNET has no pictures. `species_images.py` takes each species' **Wikipedia** t
 - **Scan** — a card per species, newest first. The card is a **Rive** animation: a Madhubani print of the bird on the back, its photo and names on the front (tap to flip), each bird with its own fixed colour scheme. A pill plays the best call and opens the bird's call history. The top pill pulses "Listening…" and says "Heard a …!" on each detection.
 - **Radar** — calls per hour for a chosen day.
 - **Logbook** — every species collected, with search, sorting, a call-quality filter and dates.
-- A **surfaced event** shows a "Bird found!" toast and is spoken aloud.
+- A **surfaced event** shows a "Bird found!" toast.
 
 The app never shows BirdNET's score. Each call gets a label instead:
 

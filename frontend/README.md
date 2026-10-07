@@ -27,7 +27,7 @@ Open it on your phone at `http://<mac-lan-ip>:5173`. The API is found automatica
 
 **Species sheet** (from Scan or Logbook): photo, names, "Last heard Today, 16:24", the best call, call count, and the full call log with ⋮ menus (download, share). Chips filter the log by call quality: only types the bird actually has are shown, it opens on the best available (Clear Call, then Likely, then All), and the chips are hidden when every call is the same type. The photo credit sits at the bottom.
 
-A surfaced (hero) event shows a "Bird found! It's a …" toast on every tab and is spoken aloud (`utils/heroVoice.ts`).
+A surfaced (hero) event shows a "Bird found! It's a …" toast on every tab.
 
 ## Call quality instead of confidence
 

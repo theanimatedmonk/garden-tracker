@@ -1405,6 +1405,11 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Mock status bar: only shown inside the desktop phone frame. */
+.mock-status-bar {
+  display: none;
+}
+
 /* ============ Phone frame (desktop / tablet) ============
    On wider screens the app sits in a phone: bezel, rounded screen, Dynamic Island and home
    indicator. The transform makes the frame the containing block for position: fixed, so the
@@ -1452,6 +1457,35 @@ button {
     background: #000;
     transform: translateX(-50%);
     pointer-events: none;
+  }
+
+  /* Mock status bar, level with the Dynamic Island */
+  .mock-status-bar {
+    position: absolute;
+    z-index: 300;
+    top: 11px;
+    left: 0;
+    right: 0;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 30px 0 44px;
+    color: #fff;
+    pointer-events: none;
+  }
+
+  .mock-status-time {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mock-status-icons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
   /* Home indicator */

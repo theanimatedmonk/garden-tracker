@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { AudioProvider } from "./audio/AudioProvider";
 import { BookIcon, MicIcon, RadarIcon } from "./components/Icons";
+import { MockStatusBar } from "./components/MockStatusBar";
 import { DetectionsProvider, useStream } from "./data/DetectionsProvider";
-import { speakHeroFound } from "./utils/heroVoice";
 import { LogbookPage } from "./pages/LogbookPage";
 import { ObserverPage } from "./pages/ObserverPage";
 import { SoundscapePage } from "./pages/SoundscapePage";
@@ -21,14 +21,13 @@ const TABS: TabDef[] = [
   { path: "/logbook", label: "Logbook", icon: <BookIcon />, render: () => <LogbookPage /> },
 ];
 
-/** Announces surfaced (hero) events by voice and with a toast, on every page. */
+/** Shows a toast for surfaced (hero) events, on every page. */
 function useHeroFound() {
   const [found, setFound] = useState<{ species: string; key: number } | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
   useStream((data) => {
     if (data.type === "event" && data.species && data.surface !== false) {
-      speakHeroFound(data.species);
       setFound({ species: data.species, key: Date.now() });
       window.clearTimeout(timer.current);
       timer.current = window.setTimeout(() => setFound(null), 4000);
@@ -55,6 +54,7 @@ function Shell() {
 
   return (
     <div className="app">
+      <MockStatusBar />
       <main className="app-main">
         {TABS.map((tab) =>
           tab === current || visited.has(tab.path) ? (

@@ -131,7 +131,7 @@ These are **display-only**, set in `confidenceTier` in [`frontend/src/utils/dete
 2. BirdNET: *House Crow* **0.52** (above **0.20**) → up to 5 top species rows appended to **`detections.jsonl`**; WAVs **kept**.
 3. **0.52 ≥ MIN_CONFIDENCE (0.35)** and cooldown clear → **JEV** gets context: species, confidence, past crow count, etc.
 4. Jev returns high “surface” score → **WildlifeEvent** with `jev_reason` like `jev: confident detection (p=0.72)`.
-5. UI: the crow's card moves to the top of **Scan**, the status pill says “Heard a House Crow!”, and the surfaced event pops a “Bird found!” toast (also spoken aloud).
+5. UI: the crow's card moves to the top of **Scan**, the status pill says “Heard a House Crow!”, and the surfaced event pops a “Bird found!” toast.
 
 **08:06 — Same crow, weaker slice**
 
