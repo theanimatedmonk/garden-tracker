@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     mock_birdnet: bool = True
     birdnet_lat: float = 12.9716
     birdnet_lon: float = 77.5946
+    # Human-readable place for the coordinates above (shown when sharing a clip).
+    location_name: str = "Bengaluru, Karnataka, India"
     birdnet_use_geo: bool = True
     birdnet_min_conf: float = 0.20
     history_predictions_per_segment: int = 5
@@ -27,6 +29,16 @@ class Settings(BaseSettings):
     typesafe_pai_base_url: str = Field(default="", validation_alias="JEV_BASE_URL")
     jev_model: str = "jev-latest"
     jev_surface_threshold: float = 0.55
+
+    # Supabase: history in Postgres, compressed clips in Storage. Leave the URL or key empty to keep
+    # history in local JSONL files instead. The secret (service-role) key must stay on the backend.
+    supabase_url: str = ""
+    supabase_secret_key: str = ""
+    supabase_bucket: str = "recordings"
+
+    @property
+    def supabase_enabled(self) -> bool:
+        return bool(self.supabase_url.strip() and self.supabase_secret_key.strip())
 
 
 settings = Settings()

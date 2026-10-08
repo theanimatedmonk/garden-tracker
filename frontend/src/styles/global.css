@@ -134,7 +134,8 @@ button {
 /* ============ Toast ============ */
 .toast {
   position: fixed;
-  z-index: 60;
+  /* Above sheets (100) and dialogs (200), so it shows while a sheet is open. */
+  z-index: 250;
   top: calc(var(--safe-top) + 64px);
   left: 50%;
   transform: translateX(-50%);
@@ -768,10 +769,46 @@ button {
   align-items: center;
 }
 
+/* Photo plus the "Not this bird?" flag button tucked onto its corner. */
+.sheet-portrait-wrap {
+  position: relative;
+  margin: 6px 0 16px;
+}
+
+.portrait-flag {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 3px solid var(--sheet);
+  border-radius: 50%;
+  background: #3a3a3c;
+  color: #f2f2f7;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.portrait-flag svg {
+  width: 17px;
+  height: 17px;
+}
+
+.portrait-flag:hover {
+  background: #48484a;
+}
+
+.portrait-flag:active {
+  transform: scale(0.92);
+}
+
 .sheet-portrait {
   width: 112px;
   height: 140px;
-  margin: 6px 0 16px;
   border-radius: 24px;
   overflow: hidden;
   display: grid;
@@ -945,7 +982,7 @@ button {
   z-index: 5;
   right: 0;
   top: calc(100% + 4px);
-  min-width: 190px;
+  min-width: 220px;
   padding: 6px;
   border-radius: 16px;
   background: #3a3a3c;
@@ -974,12 +1011,114 @@ button {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.call-menu-hint {
-  margin: 4px 12px 6px;
-  padding-top: 8px;
+.call-menu .menu-danger {
+  margin-top: 4px;
   border-top: 1px solid var(--line);
+  border-radius: 0 0 10px 10px;
+  padding-top: 12px;
+  color: #ff6b60;
+}
+
+.call-log-error {
+  align-self: stretch;
+  margin: 0 0 10px;
+}
+
+.call-menu.up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+/* The call's quality hint heads the menu. */
+.call-menu-hint {
+  margin: 0 0 4px;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--line);
   font-size: 12px;
   color: var(--muted);
+}
+
+/* ============ Confirm dialog ============ */
+.dialog-root {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  animation: fade 200ms ease;
+}
+
+.dialog {
+  position: relative;
+  width: min(100%, 340px);
+  padding: 24px 20px 14px;
+  border-radius: 26px;
+  background: #2c2c2e;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  animation: dialog-in 220ms cubic-bezier(0.2, 0.9, 0.25, 1.1);
+}
+
+.dialog h2 {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.dialog-body p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.dialog-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.dialog .form-error {
+  margin: 12px 0 0;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 20px;
+}
+
+.btn-danger {
+  padding: 14px 16px;
+  border: none;
+  border-radius: 999px;
+  background: #ff453a;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-danger:disabled,
+.dialog .btn-text:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
 }
 
 /* ============ Pages (Radar, Logbook) ============ */

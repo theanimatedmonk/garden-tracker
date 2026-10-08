@@ -82,6 +82,15 @@ export function CheckIcon() {
   );
 }
 
+export function FlagIcon() {
+  return (
+    <svg {...base}>
+      <path d="M5 21V4" />
+      <path d="M5 4h11l-2 4 2 4H5" />
+    </svg>
+  );
+}
+
 export function KebabIcon() {
   return (
     <svg {...base} stroke="none">

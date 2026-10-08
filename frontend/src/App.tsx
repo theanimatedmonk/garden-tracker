@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { AudioProvider } from "./audio/AudioProvider";
 import { BookIcon, MicIcon, RadarIcon } from "./components/Icons";
 import { MockStatusBar } from "./components/MockStatusBar";
+import { ToastProvider, useToast } from "./components/Toast";
 import { DetectionsProvider, useStream } from "./data/DetectionsProvider";
 import { LogbookPage } from "./pages/LogbookPage";
 import { ObserverPage } from "./pages/ObserverPage";
@@ -23,19 +24,16 @@ const TABS: TabDef[] = [
 
 /** Shows a toast for surfaced (hero) events, on every page. */
 function useHeroFound() {
-  const [found, setFound] = useState<{ species: string; key: number } | null>(null);
-  const timer = useRef<number | undefined>(undefined);
-
+  const showToast = useToast();
   useStream((data) => {
     if (data.type === "event" && data.species && data.surface !== false) {
-      setFound({ species: data.species, key: Date.now() });
-      window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => setFound(null), 4000);
+      showToast(
+        <>
+          Bird found! It&apos;s a <strong>{data.species}</strong>
+        </>,
+      );
     }
   });
-  useEffect(() => () => window.clearTimeout(timer.current), []);
-
-  return found;
 }
 
 /**
@@ -43,7 +41,7 @@ function useHeroFound() {
  * instant (no Rive reload, no refetch flash) and each tab keeps its own scroll position.
  */
 function Shell() {
-  const found = useHeroFound();
+  useHeroFound();
   const { pathname } = useLocation();
   const current = TABS.find((t) => t.path === pathname) ?? TABS[0];
   const [visited, setVisited] = useState<Set<string>>(() => new Set([current.path]));
@@ -65,12 +63,6 @@ function Shell() {
         )}
       </main>
 
-      {found && (
-        <div key={found.key} className="toast" role="status">
-          Bird found! It&apos;s a <strong>{found.species}</strong>
-        </div>
-      )}
-
       <nav className="tabbar" aria-label="Main">
         {TABS.map((tab) => (
           <NavLink key={tab.path} to={tab.path} end className={tab === current ? "tab active" : "tab"}>
@@ -87,7 +79,9 @@ export default function App() {
   return (
     <DetectionsProvider>
       <AudioProvider>
-        <Shell />
+        <ToastProvider>
+          <Shell />
+        </ToastProvider>
       </AudioProvider>
     </DetectionsProvider>
   );

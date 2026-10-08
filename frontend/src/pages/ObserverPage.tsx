@@ -7,7 +7,7 @@ import { SpeciesCard } from "../components/SpeciesCard";
 import { SpeciesSheet } from "../components/SpeciesSheet";
 import { useDetections, useStream } from "../data/DetectionsProvider";
 import { cardRectOnScreen } from "../utils/cardLayout";
-import { groupDetectionsBySpecies, type SpeciesGroup } from "../utils/detections";
+import { groupDetectionsBySpecies } from "../utils/detections";
 
 const HEARD_BANNER_MS = 5000;
 
@@ -88,7 +88,7 @@ function ScanReel({
 export function ObserverPage({ active }: { active: boolean }) {
   const { detections, loaded, error } = useDetections();
   const [heard, setHeard] = useState<string | null>(null);
-  const [sheetGroup, setSheetGroup] = useState<SpeciesGroup | null>(null);
+  const [sheetSpecies, setSheetSpecies] = useState<string | null>(null);
   const heardTimer = useRef<number | undefined>(undefined);
 
   useStream((message) => {
@@ -101,6 +101,8 @@ export function ObserverPage({ active }: { active: boolean }) {
   useEffect(() => () => window.clearTimeout(heardTimer.current), []);
 
   const groups = useMemo(() => groupDetectionsBySpecies(detections), [detections]);
+  // Looked up live, so the sheet follows new calls and closes if the species is removed.
+  const sheetGroup = groups.find((g) => g.species === sheetSpecies) ?? null;
 
   const status = !loaded
     ? { tone: "idle", text: "Tuning in…" }
@@ -160,7 +162,7 @@ export function ObserverPage({ active }: { active: boolean }) {
                 type="button"
                 className="icon-btn"
                 aria-label={`Open ${g.species} history`}
-                onClick={() => setSheetGroup(g)}
+                onClick={() => setSheetSpecies(g.species)}
               >
                 <ExpandIcon />
               </button>
@@ -169,7 +171,7 @@ export function ObserverPage({ active }: { active: boolean }) {
         ))}
       </div>
 
-      <SpeciesSheet group={sheetGroup} onClose={() => setSheetGroup(null)} />
+      <SpeciesSheet group={sheetGroup} onClose={() => setSheetSpecies(null)} />
     </section>
   );
 }

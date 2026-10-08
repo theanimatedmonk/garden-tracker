@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, apiUrl, type Detection } from "../api/client";
+import { api, apiUrl, type Detection, type DeviceLocation } from "../api/client";
 
 const POLL_MS = 5000;
 const LIMIT = 500;
@@ -14,7 +14,13 @@ type DetectionsState = {
   detections: Detection[];
   loaded: boolean;
   error: string | null;
+  /** Where the listener is, from /api/status; null until known. */
+  location: DeviceLocation | null;
   subscribe: (listener: (message: StreamMessage) => void) => () => void;
+  /** Remove one call the user says isn't this bird. */
+  removeCall: (id: string) => Promise<void>;
+  /** Remove every call of a species the user doesn't trust. */
+  removeSpecies: (species: string) => Promise<void>;
 };
 
 const DetectionsContext = createContext<DetectionsState | null>(null);
@@ -28,6 +34,7 @@ export function DetectionsProvider({ children }: { children: ReactNode }) {
   const [detections, setDetections] = useState<Detection[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [location, setLocation] = useState<DeviceLocation | null>(null);
   const listeners = useRef(new Set<(message: StreamMessage) => void>());
   const inFlight = useRef(false);
   const again = useRef(false);
@@ -61,6 +68,29 @@ export function DetectionsProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, [refresh]);
 
+  // Fetched ahead of time so sharing never waits on the network (the copy must start inside the tap).
+  useEffect(() => {
+    if (location) {
+      return;
+    }
+    let cancelled = false;
+    const load = () =>
+      api
+        .status()
+        .then((s) => {
+          if (!cancelled && s.location) {
+            setLocation(s.location);
+          }
+        })
+        .catch(() => {});
+    load();
+    const retry = window.setInterval(load, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(retry);
+    };
+  }, [location]);
+
   useEffect(() => {
     const source = new EventSource(apiUrl("/api/events/stream"));
     source.onmessage = (msg) => {
@@ -70,7 +100,7 @@ export function DetectionsProvider({ children }: { children: ReactNode }) {
       } catch {
         return;
       }
-      if (message.type === "detection" || message.type === "event") {
+      if (message.type === "detection" || message.type === "event" || message.type === "removed") {
         refresh();
       }
       listeners.current.forEach((listener) => listener(message));
@@ -85,9 +115,27 @@ export function DetectionsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const removeCall = useCallback(
+    async (id: string) => {
+      await api.removeDetection(id);
+      setDetections((list) => list.filter((d) => d.id !== id));
+      refresh();
+    },
+    [refresh],
+  );
+
+  const removeSpecies = useCallback(
+    async (species: string) => {
+      await api.removeSpecies(species);
+      setDetections((list) => list.filter((d) => d.species !== species));
+      refresh();
+    },
+    [refresh],
+  );
+
   const value = useMemo(
-    () => ({ detections, loaded, error, subscribe }),
-    [detections, loaded, error, subscribe],
+    () => ({ detections, loaded, error, location, subscribe, removeCall, removeSpecies }),
+    [detections, loaded, error, location, subscribe, removeCall, removeSpecies],
   );
   return <DetectionsContext.Provider value={value}>{children}</DetectionsContext.Provider>;
 }

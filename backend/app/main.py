@@ -8,16 +8,18 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app.audio_utils import AudioSegmentBuffer, pcm_stats, resample_pcm_int16, save_wav
+from app.audio_utils import AudioSegmentBuffer, encode_mp3, pcm_stats, resample_pcm_int16, save_wav
 from app.birdnet_runner import birdnet_runner
 from app.config import settings
 from app.event_processor import event_processor
 from app.species_images import attach_image, request_species_image
 from app.species_images import configure_cache as configure_image_cache
-from app.store import WildlifeEvent, store
+from app.store import WildlifeEvent, store, utc_now
+from app.supabase_client import SupabaseClient
 
 import logging
 
@@ -81,6 +83,52 @@ def _delete_segment_files(wav_path: Path, birdnet_path: Path) -> None:
             logger.warning("Could not delete unused recording %s", path)
 
 
+def _store_clip(segment_id: str, wav_path: Path, birdnet_path: Path) -> str:
+    """Where a logged segment's clip lives. With Supabase: compress to MP3, upload to Storage,
+    drop the local WAVs and return the object key. Otherwise (or if the upload fails) the local
+    WAV path, which the backend serves directly."""
+    remote = store.remote
+    if remote is None:
+        return str(wav_path)
+    key = f"{utc_now():%Y/%m/%d}/{segment_id}.mp3"
+    try:
+        remote.upload(key, encode_mp3(wav_path), "audio/mpeg")
+    except Exception:
+        logger.exception("Clip upload failed; keeping %s locally", wav_path)
+        return str(wav_path)
+    _delete_segment_files(wav_path, birdnet_path)
+    return key
+
+
+def _is_local_clip(ref: str) -> bool:
+    return ref.endswith(".wav")
+
+
+def _remove_stored_clips(refs: list[str]) -> int:
+    """Delete clips no detection uses any more: local WAVs (and their 48 kHz copies, only inside the
+    recordings folder) and MP3s in Supabase Storage."""
+    root = RECORDINGS_DIR.resolve()
+    deleted = 0
+    remote_keys = []
+    for ref in refs:
+        if not _is_local_clip(ref):
+            remote_keys.append(ref)
+            continue
+        wav = Path(ref).resolve()
+        if root not in wav.parents:
+            logger.warning("Not deleting recording outside %s: %s", root, wav)
+            continue
+        _delete_segment_files(wav, wav.with_name(f"{wav.stem}_48k.wav"))
+        deleted += 1
+    if remote_keys and store.remote is not None:
+        try:
+            store.remote.remove_objects(remote_keys)
+            deleted += len(remote_keys)
+        except Exception:
+            logger.exception("Could not delete %d clips from Supabase Storage", len(remote_keys))
+    return deleted
+
+
 def process_segment(pcm: bytes, device_id: str) -> tuple[list[dict], WildlifeEvent | None]:
     segment_id = str(uuid4())
     wav_path = RECORDINGS_DIR / f"{segment_id}.wav"
@@ -133,14 +181,16 @@ def process_segment(pcm: bytes, device_id: str) -> tuple[list[dict], WildlifeEve
         _delete_segment_files(wav_path, birdnet_path)
         return [], None
 
+    audio_ref = _store_clip(segment_id, wav_path, birdnet_path)
     detections, event = event_processor.process(
         predictions,
-        audio_path=str(wav_path),
+        audio_path=audio_ref,
         source_device=device_id,
         model=f"birdnet ({birdnet_runner.mode})",
     )
     if not detections:
         _delete_segment_files(wav_path, birdnet_path)
+        _remove_stored_clips([audio_ref])
         return [], event
     last_segment_diagnostics.update(
         {
@@ -187,10 +237,15 @@ def status() -> dict:
         "birdnet_geo": settings.birdnet_use_geo,
         "birdnet_lat": settings.birdnet_lat,
         "birdnet_lon": settings.birdnet_lon,
+        "location": {
+            "name": settings.location_name,
+            "lat": settings.birdnet_lat,
+            "lon": settings.birdnet_lon,
+        },
         "analysis_window_seconds": settings.analysis_window_seconds,
         "birdnet_min_conf": settings.birdnet_min_conf,
         "min_confidence": settings.min_confidence,
-        "storage": "jsonl history on disk (Supabase later)",
+        "storage": "supabase" if store.remote is not None else "jsonl history on disk",
         "jev_mode": settings.jev_mode,
         "jev_llm_configured": bool(settings.typesafe_pai_api_key.strip()),
         "jev_model": settings.jev_model,
@@ -235,12 +290,44 @@ async def events_stream() -> StreamingResponse:
     return StreamingResponse(generator(), media_type="text/event-stream")
 
 
-@app.get("/api/recordings/{detection_id}")
-def get_recording(detection_id: str) -> FileResponse:
+async def _remove(*, ids: list[str] | None = None, species: str | None = None) -> dict:
+    removed, orphaned = await run_in_threadpool(store.remove_detections, ids=ids, species=species)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Nothing to remove")
+    deleted = await run_in_threadpool(_remove_stored_clips, orphaned)
+    await broadcast_message({"type": "removed", "ids": removed})
+    return {"removed": len(removed), "recordings_deleted": deleted}
+
+
+@app.delete("/api/detections/{detection_id}")
+async def delete_detection(detection_id: str) -> dict:
+    """The user says this call isn't the bird BirdNET named: drop it (and its clip, if unused)."""
+    return await _remove(ids=[detection_id])
+
+
+@app.delete("/api/species/{species}")
+async def delete_species(species: str) -> dict:
+    """The user doesn't trust any detection of this species: drop all of them from the history."""
+    return await _remove(species=species)
+
+
+@app.get("/api/recordings/{detection_id}", response_model=None)
+def get_recording(detection_id: str) -> FileResponse | RedirectResponse:
+    """A local WAV directly, or a short-lived signed link to the MP3 in Supabase Storage."""
     path = store.get_recording_path(detection_id)
-    if path is None or not Path(path).is_file():
+    if path is None:
         raise HTTPException(status_code=404, detail="Recording not found")
-    return FileResponse(path, media_type="audio/wav")
+    if _is_local_clip(path):
+        if not Path(path).is_file():
+            raise HTTPException(status_code=404, detail="Recording not found")
+        return FileResponse(path, media_type="audio/wav")
+    if store.remote is None:
+        raise HTTPException(status_code=404, detail="Recording is in Supabase, which isn't configured")
+    try:
+        return RedirectResponse(store.remote.signed_url(path), status_code=307)
+    except Exception as exc:
+        logger.exception("Could not sign %s", path)
+        raise HTTPException(status_code=502, detail="Could not reach Supabase Storage") from exc
 
 
 @app.post("/api/ingest/heartbeat")
@@ -294,6 +381,11 @@ def on_startup() -> None:
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     store.configure_persistence(DETECTIONS_LOG, EVENTS_LOG)
+    if settings.supabase_enabled:
+        store.use_supabase(
+            SupabaseClient(settings.supabase_url, settings.supabase_secret_key, settings.supabase_bucket)
+        )
+        logger.info("History in Supabase (%s); clips in bucket %r", settings.supabase_url, settings.supabase_bucket)
     configure_image_cache(IMAGE_CACHE)
     for species in store.list_species():
         request_species_image(species["name"], species.get("scientific_name"))

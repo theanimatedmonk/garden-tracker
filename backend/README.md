@@ -46,7 +46,7 @@ MIN_CONFIDENCE=0.35
 ANALYSIS_WINDOW_SECONDS=3
 ```
 
-Adjust `BIRDNET_LAT` / `BIRDNET_LON` to your location so BirdNET filters to species that occur near you. First startup downloads model weights (may take a few minutes).
+Adjust `BIRDNET_LAT` / `BIRDNET_LON` to your location so BirdNET filters to species that occur near you, and set `LOCATION_NAME` to the place (e.g. `Bengaluru, Karnataka, India`). The ESP32 has no GPS, so these are the only location the system knows; `/api/status` returns them as `location`, and the app includes them when a clip is shared. First startup downloads model weights (may take a few minutes).
 
 Phone playback of non-local species (e.g. a European owl clip) may score in BirdNET but **won’t** appear when `BIRDNET_USE_GEO=true` — real window birds will.
 
@@ -92,6 +92,22 @@ JEV_MODEL=jev-latest
 
 Recordings land in `backend/data/recordings/`.
 
-## Supabase
+## Supabase (history + clips in the cloud)
 
-Not wired yet — history lives in `data/history/*.jsonl` (loaded into memory at startup) plus WAV files on disk. Schema from `plan.md` will map here in a later phase.
+With `SUPABASE_URL` and `SUPABASE_SECRET_KEY` set, detections and events live in Supabase Postgres and each logged clip is compressed to **MP3** (~13 KB for 3 s, about 7x smaller than WAV) and stored in a private **`recordings`** Storage bucket. Without them, history stays in `data/history/*.jsonl` and clips as local WAVs, exactly as before.
+
+Setup (free tier is plenty: ~190 clips/day ≈ 2.5 MB/day, so the 1 GB of Storage lasts over a year):
+
+1. Supabase dashboard → **SQL Editor** → paste and run [`../supabase/schema.sql`](../supabase/schema.sql). It creates `detections`, `events`, a `species_summary` view and the private `recordings` bucket, with row-level security on and no policies (the public anon key can't read anything).
+2. **Project Settings → API**: copy the project URL and the **secret** (service-role) key into `backend/.env` as `SUPABASE_URL` and `SUPABASE_SECRET_KEY`. Never put the secret key in the frontend.
+3. Move the existing history across (safe to re-run; nothing is deleted):
+
+   ```bash
+   .venv/bin/python -m scripts.migrate_to_supabase --dry-run
+   .venv/bin/python -m scripts.migrate_to_supabase
+   ```
+
+   After a successful run the JSONL files are renamed to `*.migrated-<date>.jsonl`. Delete `data/recordings` yourself once the app looks right.
+4. Restart the backend. `GET /api/status` shows `"storage": "supabase"`.
+
+How it runs: the backend keeps the latest 1,000 detections in memory and reads species totals from the `species_summary` view. New detections are written to Supabase; if a write fails (e.g. offline), the row goes to the local JSONL instead and the migration script pushes it next time. Playback (`/api/recordings/{id}`) redirects to a one-hour signed Storage URL. Removing a call or species deletes the rows (events cascade) and any clip no remaining detection uses. The species photo cache stays local in `data/history/image_cache.json`; it rebuilds itself.

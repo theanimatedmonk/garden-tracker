@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiUrl, formatWhen } from "../api/client";
 import { useStopAudio } from "../audio/AudioProvider";
+import { useDetections } from "../data/DetectionsProvider";
 import {
   defaultTierFilter,
   matchesTier,
@@ -11,7 +12,9 @@ import {
 import { BottomSheet } from "./BottomSheet";
 import { CallButton } from "./CallButton";
 import { CallLog } from "./CallLog";
-import { BirdGlyph } from "./Icons";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { BirdGlyph, FlagIcon } from "./Icons";
+import { useToast } from "./Toast";
 
 type Props = {
   group: SpeciesGroup | null;
@@ -20,7 +23,12 @@ type Props = {
 
 export function SpeciesSheet({ group, onClose }: Props) {
   const stopAudio = useStopAudio();
+  const { removeSpecies } = useDetections();
+  const showToast = useToast();
   const [tier, setTier] = useState<TierFilter>("all");
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   // Each species opens on its best calls. Only on opening: calls arriving while the sheet is
   // open don't override a chip the user picked.
@@ -28,7 +36,11 @@ export function SpeciesSheet({ group, onClose }: Props) {
   const detections = group?.detections;
   const detectionsRef = useRef(detections);
   detectionsRef.current = detections;
-  useEffect(() => setTier(defaultTierFilter(detectionsRef.current ?? [])), [species]);
+  useEffect(() => {
+    setTier(defaultTierFilter(detectionsRef.current ?? []));
+    setConfirming(false);
+    setRemoveError(null);
+  }, [species]);
 
   const close = useCallback(() => {
     stopAudio();
@@ -41,13 +53,50 @@ export function SpeciesSheet({ group, onClose }: Props) {
         (f) => f.count > 0,
       )
     : [];
+  // If the selected type's last call was removed, fall back to everything.
+  const activeTier = tierChips.some((f) => f.id === tier) ? tier : "all";
+
+  const confirmRemove = async () => {
+    if (!group) {
+      return;
+    }
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      stopAudio();
+      await removeSpecies(group.species);
+      showToast(
+        <>
+          <strong>{group.species}</strong> removed from your logbook
+        </>,
+      );
+      setConfirming(false);
+      // The species is gone from the feed, so the sheet closes with it.
+      onClose();
+    } catch {
+      setRemoveError("Couldn't remove it. Is the backend running?");
+    } finally {
+      setRemoving(false);
+    }
+  };
 
   return (
     <BottomSheet open={group !== null} label={group?.species ?? "Species"} onClose={close}>
       {group && (
         <div className="species-sheet">
-          <div className="sheet-portrait">
-            {group.image_url ? <img src={group.image_url} alt="" /> : <BirdGlyph />}
+          <div className="sheet-portrait-wrap">
+            <div className="sheet-portrait">
+              {group.image_url ? <img src={group.image_url} alt="" /> : <BirdGlyph />}
+            </div>
+            <button
+              type="button"
+              className="portrait-flag"
+              aria-label="Not this bird? Remove it"
+              title="Not this bird?"
+              onClick={() => setConfirming(true)}
+            >
+              <FlagIcon />
+            </button>
           </div>
           <h2 className="sheet-name">{group.species}</h2>
           {group.scientific_name && <p className="sheet-sci">{group.scientific_name}</p>}
@@ -76,7 +125,7 @@ export function SpeciesSheet({ group, onClose }: Props) {
                   key={f.id}
                   type="button"
                   className="chip"
-                  aria-pressed={tier === f.id}
+                  aria-pressed={activeTier === f.id}
                   onClick={() => setTier(f.id)}
                 >
                   {f.label}
@@ -85,7 +134,12 @@ export function SpeciesSheet({ group, onClose }: Props) {
               ))}
             </div>
           )}
-          <CallLog species={group.species} detections={group.detections.filter((d) => matchesTier(d, tier))} />
+          <CallLog
+            species={group.species}
+            scientificName={group.scientific_name}
+            imageUrl={group.image_url}
+            detections={group.detections.filter((d) => matchesTier(d, activeTier))}
+          />
 
           {group.image_credit && (
             <p className="photo-credit">
@@ -101,6 +155,24 @@ export function SpeciesSheet({ group, onClose }: Props) {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={confirming && group !== null}
+        title={group ? `Not a ${group.species}?` : "Not this bird?"}
+        confirmLabel="Yes, remove this bird"
+        busy={removing}
+        error={removeError}
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirming(false)}
+      >
+        {group && (
+          <p>
+            {group.detections.length === 1
+              ? "Its call will be removed from your logbook."
+              : `All ${group.detections.length} of its calls will be removed from your logbook.`}{" "}
+            You can&apos;t undo this.
+          </p>
+        )}
+      </ConfirmDialog>
     </BottomSheet>
   );
 }

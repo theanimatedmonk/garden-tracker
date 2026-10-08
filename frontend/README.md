@@ -27,6 +27,10 @@ Open it on your phone at `http://<mac-lan-ip>:5173`. The API is found automatica
 
 **Species sheet** (from Scan or Logbook): photo, names, "Last heard Today, 16:24", the best call, call count, and the full call log with ⋮ menus (download, share). Chips filter the log by call quality: only types the bird actually has are shown, it opens on the best available (Clear Call, then Likely, then All), and the chips are hidden when every call is the same type. The photo credit sits at the bottom.
 
+If BirdNET got it wrong, the flag on the photo asks "Not a Black Kite?" and **Yes, remove this bird** deletes the species and all its calls; **I don't trust this sound** in a call's ⋮ menu deletes just that call. Both are permanent (`DELETE /api/species/{name}`, `DELETE /api/detections/{id}`), and a recording is only deleted once no remaining call uses it.
+
+**Share clip** (⋮ menu) copies a sighting to the clipboard — the bird's photo (as a PNG and in rich text), its name and scientific name, when it was heard, the location (`LOCATION_NAME` and BirdNET's coordinates from `/api/status`, with an OpenStreetMap link) and the creator link — and downloads the call's WAV alongside, since browsers can't put audio on the clipboard. Over plain-http LAN it falls back to a rich-text copy. See `utils/shareClip.ts`.
+
 A surfaced (hero) event shows a "Bird found! It's a …" toast on every tab.
 
 ## Call quality instead of confidence

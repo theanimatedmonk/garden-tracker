@@ -7,7 +7,6 @@ import {
   groupDetectionsBySpecies,
   parseDateInput,
   toDateInputValue,
-  type SpeciesGroup,
 } from "../utils/detections";
 
 type HourBucket = {
@@ -19,7 +18,7 @@ type HourBucket = {
 export function SoundscapePage() {
   const { detections, loaded } = useDetections();
   const [day, setDay] = useState(() => toDateInputValue(new Date()));
-  const [sheetGroup, setSheetGroup] = useState<SpeciesGroup | null>(null);
+  const [sheetSpecies, setSheetSpecies] = useState<string | null>(null);
 
   const dayDetections = useMemo(
     () => filterDetectionsByDay(detections, parseDateInput(day)),
@@ -45,6 +44,11 @@ export function SoundscapePage() {
   }, [dayDetections]);
 
   const daySpecies = useMemo(() => groupDetectionsBySpecies(dayDetections), [dayDetections]);
+  // The sheet shows the bird's whole history (not just this day), looked up live.
+  const sheetGroup = useMemo(
+    () => (sheetSpecies ? (groupDetectionsBySpecies(detections).find((g) => g.species === sheetSpecies) ?? null) : null),
+    [detections, sheetSpecies],
+  );
   const maxCount = Math.max(1, ...buckets.map((b) => b.detections.length));
   const busiest = buckets.reduce((a, b) => (b.detections.length > a.detections.length ? b : a));
 
@@ -98,7 +102,7 @@ export function SoundscapePage() {
       <ul className="species-rows">
         {daySpecies.map((g) => (
           <li key={g.species}>
-            <button type="button" className="species-row" onClick={() => setSheetGroup(g)}>
+            <button type="button" className="species-row" onClick={() => setSheetSpecies(g.species)}>
               <span
                 className="species-row-avatar"
                 style={g.image_url ? { backgroundImage: `url(${g.image_url})` } : undefined}
@@ -111,7 +115,7 @@ export function SoundscapePage() {
         {loaded && dayDetections.length === 0 && <li className="empty-note">No birds heard on this day.</li>}
       </ul>
 
-      <SpeciesSheet group={sheetGroup} onClose={() => setSheetGroup(null)} />
+      <SpeciesSheet group={sheetGroup} onClose={() => setSheetSpecies(null)} />
     </section>
   );
 }

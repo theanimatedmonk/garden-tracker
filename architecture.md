@@ -54,7 +54,7 @@ If recordings are silent: check L/R is tied to GND, SD is on GPIO 33, and power 
 
 `birdnet_runner.py` runs **BirdNET** on the segment, geo-filtered to species that occur near `BIRDNET_LAT` / `BIRDNET_LON` (Bengaluru).
 
-- Anything scoring at least **`BIRDNET_MIN_CONF` (0.20)** is **logged**: up to the top 5 species go to `detections.jsonl`, and the WAV is kept for playback.
+- Anything scoring at least **`BIRDNET_MIN_CONF` (0.20)** is **logged**: up to the top 5 species are saved to the history (Supabase, or `detections.jsonl` without it), and the clip is kept for playback — compressed to MP3 and uploaded to Supabase Storage when it's configured.
 - If nothing reaches 0.20, the segment's WAVs are **deleted**. Noise never piles up on disk.
 
 BirdNET has the final say on *which* bird it was.
@@ -69,7 +69,7 @@ Logging is quiet; only some detections should interrupt the app. `event_processo
 
 **JEV** (`jev_client.py`) is the judgment layer. With `JEV_MODE=llm` it sends TypeSafe Jev the context — species, confidence, whether it's a first-ever species, how often it has been heard — and surfaces the event if Jev's "worth interrupting" probability is at least **`JEV_SURFACE_THRESHOLD` (0.55)**. If the API fails, simple rules decide instead. JEV never changes the species; it only decides whether this moment is worth a "Bird found!".
 
-A surfaced event is saved to `events.jsonl` with Jev's reason.
+A surfaced event is saved to the history with Jev's reason.
 
 ## 5. Photos
 
@@ -114,6 +114,7 @@ These only change what the app shows (set in `frontend/src/utils/detections.ts`)
 | Logging / surfacing thresholds, JEV mode and key, location | `backend/.env` (restart the backend) |
 | Call labels in the app | `frontend/src/utils/detections.ts` |
 | The animal card | Rive CLI project `~/Documents/rive-cli/animal-card` → `frontend/public/rive/animal-card.riv` |
-| History on disk | `backend/data/history/` (`detections.jsonl`, `events.jsonl`, `image_cache.json`) and `backend/data/recordings/` — gitignored |
+| History | Supabase (`detections`, `events`, MP3 clips in the `recordings` bucket — schema in `supabase/schema.sql`), or without Supabase `backend/data/history/*.jsonl` and `backend/data/recordings/` |
+| Supabase connection | `SUPABASE_URL` / `SUPABASE_SECRET_KEY` in `backend/.env` |
 
 More detail: [README.md](README.md) (thresholds and a worked example), [backend/README.md](backend/README.md), [frontend/README.md](frontend/README.md).

@@ -20,6 +20,16 @@ def pcm_to_wav(pcm: bytes, sample_rate: int, bits: int = 16, channels: int = 1) 
     return buffer.getvalue()
 
 
+def encode_mp3(wav_path: Path) -> bytes:
+    """Compress a clip for storage: MP3 is ~7x smaller than WAV and plays in every browser."""
+    import soundfile as sf
+
+    data, sample_rate = sf.read(str(wav_path), dtype="float32")
+    buffer = io.BytesIO()
+    sf.write(buffer, data, sample_rate, format="MP3", subtype="MPEG_LAYER_III")
+    return buffer.getvalue()
+
+
 def save_wav(path: Path, pcm: bytes, sample_rate: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(pcm_to_wav(pcm, sample_rate))

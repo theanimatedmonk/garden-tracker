@@ -177,6 +177,8 @@ Chunk size: **~1 s** of samples per upload (`SAMPLES_PER_CHUNK` in `include/conf
 
 ## Data on disk (gitignored)
 
+With Supabase configured (see [backend/README.md](backend/README.md#supabase-history--clips-in-the-cloud)), detections and events live in Supabase Postgres and clips as MP3s in its Storage; the JSONL files below then only catch writes that failed. Without it:
+
 | Path | Contents |
 |------|----------|
 | `backend/data/history/detections.jsonl` | Every logged detection |
