@@ -18,7 +18,7 @@
 #define CHUNK_BYTES (SAMPLES_PER_CHUNK * (BITS_PER_SAMPLE / 8))
 
 // Backend on your computer (LAN IP — not "localhost" from ESP32's view)
-#define BACKEND_HOST "192.168.1.5"
+#define BACKEND_HOST "192.168.1.4"
 #define BACKEND_PORT 8000
 
 #define DEVICE_ID "esp32-observer-1"
