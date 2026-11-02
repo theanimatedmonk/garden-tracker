@@ -382,10 +382,19 @@ def on_startup() -> None:
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     store.configure_persistence(DETECTIONS_LOG, EVENTS_LOG)
     if settings.supabase_enabled:
-        store.use_supabase(
-            SupabaseClient(settings.supabase_url, settings.supabase_secret_key, settings.supabase_bucket)
-        )
-        logger.info("History in Supabase (%s); clips in bucket %r", settings.supabase_url, settings.supabase_bucket)
+        try:
+            store.use_supabase(
+                SupabaseClient(
+                    settings.supabase_url, settings.supabase_secret_key, settings.supabase_bucket
+                )
+            )
+            logger.info(
+                "History in Supabase (%s); clips in bucket %r",
+                settings.supabase_url,
+                settings.supabase_bucket,
+            )
+        except Exception as exc:
+            logger.warning("Supabase unavailable at startup (%s); using local jsonl", exc)
     configure_image_cache(IMAGE_CACHE)
     for species in store.list_species():
         request_species_image(species["name"], species.get("scientific_name"))
