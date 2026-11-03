@@ -46,8 +46,9 @@ export type DeviceLocation = {
 
 export type StatusResponse = {
   ok: boolean;
-  /** Where the listener is: BirdNET's configured coordinates and a place name (no GPS on the ESP32). */
+  /** Where BirdNET geo-filters: device GPS when synced, else .env default. */
   location?: DeviceLocation;
+  location_source?: "env" | "device" | "manual";
   birdnet_mode: string;
   use_birdnet: boolean;
   storage: string;
@@ -136,8 +137,30 @@ async function sendDelete(path: string): Promise<void> {
   throw lastError ?? new Error("Backend unreachable");
 }
 
+async function sendJson<T>(path: string, method: string, body: unknown): Promise<T> {
+  let lastError: Error | null = null;
+  for (const url of apiCandidates(path)) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      continue;
+    }
+    return json<T>(res);
+  }
+  throw lastError ?? new Error("Backend unreachable");
+}
+
 export const api = {
   status: () => fetchJson<StatusResponse>("/api/status"),
+  /** Push phone/Mac GPS so BirdNET geo filter follows you without editing .env. */
+  setObserverLocation: (body: { lat: number; lon: number; name?: string }) =>
+    sendJson<{ ok: boolean; location: DeviceLocation }>("/api/location", "POST", body),
   events: () => fetchJson<{ events: WildlifeEvent[] }>("/api/events"),
   detections: (limit = 200) =>
     fetchJson<{ detections: Detection[] }>(`/api/detections?limit=${limit}`),
@@ -154,6 +177,20 @@ export function formatTime(iso: string): string {
 
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+/** Day label for the idle listen chip: "Today" / "Yesterday" / "2 Nov". */
+export function formatListenDay(iso: string): string {
+  const d = new Date(iso);
+  const dayStart = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const daysAgo = Math.round((dayStart(new Date()) - dayStart(d)) / 86_400_000);
+  if (daysAgo === 0) {
+    return "Today";
+  }
+  if (daysAgo === 1) {
+    return "Yesterday";
+  }
+  return formatDate(iso);
 }
 
 /** "Today, 22:10" / "Yesterday, 08:05" / "4 Oct, 22:10" */

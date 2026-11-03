@@ -9,8 +9,7 @@
  */
 
 import type { DeviceLocation } from "../api/client";
-
-export const CREATOR_URL = "https://x.com/deanimatedmonk/status/2107674781898174787?s=20";
+import { currentPosition, placeName } from "./deviceLocation";
 
 export type ClipInfo = {
   species: string;
@@ -22,52 +21,9 @@ export type ClipInfo = {
   location: DeviceLocation | null;
 };
 
+export const CREATOR_URL = "https://x.com/deanimatedmonk/status/2107674781898174787?s=20";
+
 type Place = DeviceLocation & { accuracy?: number; fromDevice: boolean };
-
-const LOCATE_TIMEOUT_MS = 8000;
-const GEOCODE_TIMEOUT_MS = 4000;
-
-function currentPosition(): Promise<GeolocationPosition | null> {
-  if (!window.isSecureContext || !navigator.geolocation) {
-    return Promise.resolve(null);
-  }
-  return new Promise((resolve) =>
-    navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), {
-      enableHighAccuracy: true,
-      timeout: LOCATE_TIMEOUT_MS,
-      maximumAge: 60_000,
-    }),
-  );
-}
-
-/** A short place name ("Cubbon Park, Sampangi Rama Nagar, Bengaluru, Karnataka") from OpenStreetMap. */
-async function placeName(lat: number, lon: number): Promise<string | null> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), GEOCODE_TIMEOUT_MS);
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&lat=${lat}&lon=${lon}`,
-      { signal: controller.signal, headers: { "Accept-Language": navigator.language } },
-    );
-    if (!res.ok) {
-      return null;
-    }
-    const data = (await res.json()) as { name?: string; display_name?: string; address?: Record<string, string> };
-    const a = data.address ?? {};
-    const parts = [
-      data.name,
-      a.suburb ?? a.neighbourhood ?? a.quarter,
-      a.city ?? a.town ?? a.village ?? a.county,
-      a.state,
-    ].filter((p): p is string => Boolean(p));
-    const unique = parts.filter((p, i) => parts.indexOf(p) === i);
-    return unique.length ? unique.join(", ") : (data.display_name ?? null);
-  } catch {
-    return null;
-  } finally {
-    window.clearTimeout(timer);
-  }
-}
 
 async function resolvePlace(fallback: DeviceLocation | null): Promise<Place | null> {
   const position = await currentPosition();
