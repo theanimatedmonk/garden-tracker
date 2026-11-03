@@ -182,17 +182,61 @@ button {
   overflow: hidden;
 }
 
-/* Status pill at the top of Scan: a small green dot with pulsing rings, then the status text. */
-.listen-status {
+.scan-top {
   position: absolute;
   z-index: 5;
   top: calc(var(--safe-top) + 14px);
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.scan-top > * {
+  pointer-events: auto;
+}
+
+.listen-loc-fab {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(28, 28, 30, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 150ms ease;
+}
+
+.listen-loc-fab svg {
+  width: 22px;
+  height: 22px;
+}
+
+.listen-loc-fab:active {
+  transform: translateY(-50%) scale(0.94);
+}
+
+/* Status pill at the top of Scan: a small green dot with pulsing rings, then the status text. */
+.listen-status {
+  position: relative;
+  left: auto;
+  transform: none;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: calc(100% - 32px);
+  max-width: calc(100% - 56px);
   padding: 6px 18px 6px 6px;
   border-radius: 999px;
   background: rgba(28, 28, 30, 0.85);
@@ -203,6 +247,57 @@ button {
   font-weight: 500;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.loc-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.loc-sheet-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.loc-sheet-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.loc-sheet-place {
+  margin: 8px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.loc-sheet-coords {
+  margin: 0;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.loc-sheet-source {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mint);
+}
+
+.loc-sheet-muted {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.loc-sheet-hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 .listen-text {
@@ -283,6 +378,78 @@ button {
 .is-idle .listen-orb i {
   animation: none;
   opacity: 0;
+}
+
+.is-stale {
+  padding: 6px 18px;
+  color: var(--muted);
+}
+
+.listen-text-stale {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.listen-time {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(142, 142, 147, 0.95);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+button.listen-status {
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button.listen-status:active {
+  transform: scale(0.98);
+}
+
+button.listen-status.is-stale:active {
+  transform: none;
+}
+
+.help-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.help-sheet-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.help-sheet-lead {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.help-sheet-meta {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.help-sheet-steps {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.help-sheet-steps li + li {
+  margin-top: 10px;
 }
 
 @keyframes fade-up {
