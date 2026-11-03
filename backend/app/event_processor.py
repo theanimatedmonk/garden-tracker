@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from app.birdnet_runner import RawPrediction
 from app.config import settings
+from app.observer_location import current as observer_location
 from app.jev_client import build_wildlife_state, decide_surface
 from app.species_images import species_image_url
 from app.store import Detection, WildlifeEvent, store, utc_now
@@ -114,6 +115,7 @@ class EventProcessor:
             }
             for p in ranked[1:5]
         ]
+        loc = observer_location()
         state = build_wildlife_state(
             species=best.species,
             scientific_name=best.scientific_name,
@@ -123,7 +125,7 @@ class EventProcessor:
             sightings_last_hour=sightings_last_hour,
             seconds_since_last_surface=seconds_since,
             other_predictions=other,
-            location_label=f"Bengaluru ({settings.birdnet_lat}, {settings.birdnet_lon})",
+            location_label=f"{loc.name} ({loc.lat}, {loc.lon})",
         )
         return decide_surface(state)
 

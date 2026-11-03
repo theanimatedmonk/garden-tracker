@@ -4,6 +4,7 @@ import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -19,6 +20,7 @@ from app.event_processor import event_processor
 from app.species_images import attach_image, request_species_image
 from app.species_images import configure_cache as configure_image_cache
 from app.store import WildlifeEvent, store, utc_now
+from app.observer_location import configure as configure_observer_location, current as observer_location, update as update_observer_location
 from app.supabase_client import SupabaseClient
 
 import logging
@@ -227,21 +229,35 @@ async def analyze_and_notify(segment: bytes, device_id: str) -> None:
         await broadcast_message({"type": "event", **ev_payload})
 
 
+class LocationBody(BaseModel):
+    lat: float
+    lon: float
+    name: Optional[str] = None
+
+
+@app.post("/api/location")
+def set_observer_location(body: LocationBody) -> dict:
+    """Update BirdNET geo filter from the phone or Mac browser (Geolocation API)."""
+    try:
+        loc = update_observer_location(lat=body.lat, lon=body.lon, name=body.name, source="device")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "location": loc.as_api_dict(), "location_source": loc.source}
+
+
 @app.get("/api/status")
 def status() -> dict:
+    loc = observer_location()
     return {
         "ok": True,
         "birdnet_mode": birdnet_runner.mode,
         "birdnet_init_error": birdnet_runner._init_error,
         "use_birdnet": settings.use_birdnet,
         "birdnet_geo": settings.birdnet_use_geo,
-        "birdnet_lat": settings.birdnet_lat,
-        "birdnet_lon": settings.birdnet_lon,
-        "location": {
-            "name": settings.location_name,
-            "lat": settings.birdnet_lat,
-            "lon": settings.birdnet_lon,
-        },
+        "birdnet_lat": loc.lat,
+        "birdnet_lon": loc.lon,
+        "location": loc.as_api_dict(),
+        "location_source": loc.source,
         "analysis_window_seconds": settings.analysis_window_seconds,
         "birdnet_min_conf": settings.birdnet_min_conf,
         "min_confidence": settings.min_confidence,
@@ -380,6 +396,12 @@ def on_startup() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    configure_observer_location(
+        DATA_DIR / "observer_location.json",
+        default_lat=settings.birdnet_lat,
+        default_lon=settings.birdnet_lon,
+        default_name=settings.location_name,
+    )
     store.configure_persistence(DETECTIONS_LOG, EVENTS_LOG)
     if settings.supabase_enabled:
         try:

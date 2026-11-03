@@ -15,10 +15,10 @@ class Settings(BaseSettings):
     event_cooldown_seconds: int = 300
     use_birdnet: bool = False
     mock_birdnet: bool = True
-    birdnet_lat: float = 12.9716
-    birdnet_lon: float = 77.5946
+    birdnet_lat: float = 22.3480
+    birdnet_lon: float = 82.6830
     # Human-readable place for the coordinates above (shown when sharing a clip).
-    location_name: str = "Bengaluru, Karnataka, India"
+    location_name: str = "Korba, Chhattisgarh, India"
     birdnet_use_geo: bool = True
     birdnet_min_conf: float = 0.20
     history_predictions_per_segment: int = 5

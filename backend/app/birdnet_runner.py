@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.config import settings
+from app.observer_location import current as observer_location
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +73,11 @@ class BirdNetRunner:
         return []
 
     def _analyze_birdnet(self, wav_path: Path) -> list[RawPrediction]:
+        loc = observer_location()
         kwargs: dict = {"min_conf": settings.birdnet_min_conf}
         if settings.birdnet_use_geo:
-            kwargs["lat"] = settings.birdnet_lat
-            kwargs["lon"] = settings.birdnet_lon
+            kwargs["lat"] = loc.lat
+            kwargs["lon"] = loc.lon
 
         recording = self._Recording(self._analyzer, str(wav_path), **kwargs)
         recording.analyze()

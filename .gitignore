@@ -5,6 +5,7 @@ plan.md
 backend/.venv/
 backend/data/recordings/
 backend/data/history/
+backend/data/observer_location.json
 backend/.env
 frontend/node_modules/
 frontend/dist/

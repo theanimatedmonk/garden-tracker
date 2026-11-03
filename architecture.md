@@ -52,7 +52,7 @@ If recordings are silent: check L/R is tied to GND, SD is on GPIO 33, and power 
 
 ## 3. Naming the bird — BirdNET
 
-`birdnet_runner.py` runs **BirdNET** on the segment, geo-filtered to species that occur near `BIRDNET_LAT` / `BIRDNET_LON` (Bengaluru).
+`birdnet_runner.py` runs **BirdNET** on the segment, geo-filtered to species near the **observer location** (defaults in `.env`; updated from the app via `POST /api/location` when the browser shares GPS).
 
 - Anything scoring at least **`BIRDNET_MIN_CONF` (0.20)** is **logged**: up to the top 5 species are saved to the history (Supabase, or `detections.jsonl` without it), and the clip is kept for playback — compressed to MP3 and uploaded to Supabase Storage when it's configured.
 - If nothing reaches 0.20, the segment's WAVs are **deleted**. Noise never piles up on disk.

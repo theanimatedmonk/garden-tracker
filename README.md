@@ -51,7 +51,7 @@ flowchart LR
 | **ESP32 firmware** | `src/`, `include/` | Wi‑Fi, read mic at **16 kHz mono**, send **~1 s** PCM chunks to the backend, periodic heartbeat. Does **not** run BirdNET or store birds. |
 | **Ingest** | `backend/app/main.py` | Accepts PCM; accumulates until **3 s** of audio per device. |
 | **Segment WAV** | `backend/data/recordings/` | Saves `{uuid}.wav` (16 kHz) and `{uuid}_48k.wav` for analysis. |
-| **BirdNET** | `backend/app/birdnet_runner.py` | Species + confidence on each 3 s window; geo filter (Bengaluru by default). |
+| **BirdNET** | `backend/app/birdnet_runner.py` | Species + confidence on each 3 s window; geo filter (coordinates in `.env`). |
 | **Event processor** | `backend/app/event_processor.py` | Writes **detections** to history; optionally creates a **surfaced event** for the hero. |
 | **JEV** | `backend/app/jev_client.py` | When enabled, asks TypeSafe **Jev** whether to interrupt the UI (species already fixed by BirdNET). |
 | **Store** | `backend/app/store.py` | In-memory + `detections.jsonl` / `events.jsonl`; species summaries. |

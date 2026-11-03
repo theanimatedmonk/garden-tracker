@@ -46,7 +46,9 @@ MIN_CONFIDENCE=0.35
 ANALYSIS_WINDOW_SECONDS=3
 ```
 
-Adjust `BIRDNET_LAT` / `BIRDNET_LON` to your location so BirdNET filters to species that occur near you, and set `LOCATION_NAME` to the place (e.g. `Bengaluru, Karnataka, India`). The ESP32 has no GPS, so these are the only location the system knows; `/api/status` returns them as `location`, and the app includes them when a clip is shared. First startup downloads model weights (may take a few minutes).
+BirdNET uses **`BIRDNET_LAT` / `BIRDNET_LON` / `LOCATION_NAME` in `.env` only as defaults** when no device has synced yet. Open the app on your **phone or Mac** (localhost or HTTPS): it sends GPS/Wi‑Fi position to **`POST /api/location`**, saved in `data/observer_location.json`, and BirdNET geo follows that — no reflashes or code edits when you travel.
+
+Adjust `.env` coordinates if you run headless with no browser, or as the fallback when location permission is denied.
 
 Phone playback of non-local species (e.g. a European owl clip) may score in BirdNET but **won’t** appear when `BIRDNET_USE_GEO=true` — real window birds will.
 
