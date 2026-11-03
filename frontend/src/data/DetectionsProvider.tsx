@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, apiUrl, type Detection, type DeviceLocation } from "../api/client";
+import { syncObserverLocationFromDevice, type SyncLocationResult } from "../utils/syncObserverLocation";
 
 const POLL_MS = 5000;
 const LIMIT = 500;
@@ -16,11 +17,18 @@ type DetectionsState = {
   error: string | null;
   /** Where the listener is, from /api/status; null until known. */
   location: DeviceLocation | null;
+  locationSource: string | null;
+  /** Newest ESP32 heartbeat from /api/status. */
+  deviceLastSeen: string | null;
+  /** Tap to trigger the browser location prompt (required on most browsers). */
+  syncLocationFromDevice: () => Promise<SyncLocationResult>;
   subscribe: (listener: (message: StreamMessage) => void) => () => void;
   /** Remove one call the user says isn't this bird. */
   removeCall: (id: string) => Promise<void>;
   /** Remove every call of a species the user doesn't trust. */
   removeSpecies: (species: string) => Promise<void>;
+  /** Poll detections and /api/status again (e.g. after fixing the backend or ESP32). */
+  recheckConnection: () => void;
 };
 
 const DetectionsContext = createContext<DetectionsState | null>(null);
@@ -35,6 +43,8 @@ export function DetectionsProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [location, setLocation] = useState<DeviceLocation | null>(null);
+  const [locationSource, setLocationSource] = useState<string | null>(null);
+  const [deviceLastSeen, setDeviceLastSeen] = useState<string | null>(null);
   const listeners = useRef(new Set<(message: StreamMessage) => void>());
   const inFlight = useRef(false);
   const again = useRef(false);
@@ -68,28 +78,44 @@ export function DetectionsProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  // Fetched ahead of time so sharing never waits on the network (the copy must start inside the tap).
-  useEffect(() => {
-    if (location) {
-      return;
-    }
-    let cancelled = false;
-    const load = () =>
-      api
-        .status()
-        .then((s) => {
-          if (!cancelled && s.location) {
-            setLocation(s.location);
+  const refreshStatus = useCallback(() => {
+    api
+      .status()
+      .then((s) => {
+        if (s.location) {
+          setLocation(s.location);
+        }
+        if (s.location_source) {
+          setLocationSource(s.location_source);
+        }
+        const devices = s.devices ?? [];
+        const newest = devices.reduce<string | null>((max, d) => {
+          if (!d.last_seen) {
+            return max;
           }
-        })
-        .catch(() => {});
-    load();
-    const retry = window.setInterval(load, 30_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(retry);
-    };
-  }, [location]);
+          if (!max || d.last_seen > max) {
+            return d.last_seen;
+          }
+          return max;
+        }, null);
+        setDeviceLastSeen(newest);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshStatus();
+    const id = window.setInterval(refreshStatus, POLL_MS);
+    return () => window.clearInterval(id);
+  }, [refreshStatus]);
+
+  const syncLocationFromDevice = useCallback(async (): Promise<SyncLocationResult> => {
+    const result = await syncObserverLocationFromDevice();
+    if (result.ok) {
+      refreshStatus();
+    }
+    return result;
+  }, [refreshStatus]);
 
   useEffect(() => {
     const source = new EventSource(apiUrl("/api/events/stream"));
@@ -133,9 +159,38 @@ export function DetectionsProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const recheckConnection = useCallback(() => {
+    refresh();
+    refreshStatus();
+  }, [refresh, refreshStatus]);
+
   const value = useMemo(
-    () => ({ detections, loaded, error, location, subscribe, removeCall, removeSpecies }),
-    [detections, loaded, error, location, subscribe, removeCall, removeSpecies],
+    () => ({
+      detections,
+      loaded,
+      error,
+      location,
+      locationSource,
+      deviceLastSeen,
+      syncLocationFromDevice,
+      subscribe,
+      removeCall,
+      removeSpecies,
+      recheckConnection,
+    }),
+    [
+      detections,
+      loaded,
+      error,
+      location,
+      locationSource,
+      deviceLastSeen,
+      syncLocationFromDevice,
+      subscribe,
+      removeCall,
+      removeSpecies,
+      recheckConnection,
+    ],
   );
   return <DetectionsContext.Provider value={value}>{children}</DetectionsContext.Provider>;
 }
